@@ -4,7 +4,7 @@ import kotlin.random.Random
 import org.json.JSONArray
 
 enum class MixSource(val key: String) {
-    Bing("bing"), Commons("commons"), Apod("apod");
+    Bing("bing"), Commons("commons"), Nasa("nasa");
 
     companion object {
         fun of(key: String): MixSource? = entries.firstOrNull { it.key == key }
