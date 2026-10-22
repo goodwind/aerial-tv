@@ -12,6 +12,7 @@
     <string name="cc_inputs">Inputs</string>
     <string name="cc_network">Network</string>
     <string name="cc_settings">Settings</string>
+    <string name="cc_next_wallpaper">Next photo</string>
     <string name="cc_volume">Volume</string>
     <string name="cc_muted">Muted</string>
     <string name="cc_home_default">Aerial is your home screen</string>
