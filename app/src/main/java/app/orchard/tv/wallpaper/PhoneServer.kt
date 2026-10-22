@@ -94,6 +94,14 @@ class PhoneServer private constructor(private val context: Context, private val 
                     val found = name.isNotBlank() && runBlocking(Dispatchers.Main) { Weather.choose(name) }
                     json(state().put("found", found))
                 }
+                // The owner's Unsplash Access Key; empty clears it. Anything that is not a key is refused, so a
+                // stray line break cannot reach the header it is sent in.
+                session.method == Method.POST && path == "/api/unsplash" -> {
+                    val key = form(session)["key"].orEmpty().trim()
+                    val ok = key.isEmpty() || UNSPLASH_KEY.matches(key)
+                    if (ok) onMain { AerialSettings.chooseUnsplashKey(key); Mix.refreshPoolIfStale() }
+                    json(state().put("ok", ok))
+                }
                 session.method == Method.POST && path == "/api/weather/auto" -> {
                     onMain { Weather.useNetworkLocation() }
                     json(state())
@@ -119,6 +127,8 @@ class PhoneServer private constructor(private val context: Context, private val 
             .put("selected", selected)
             .put("latestDaily", Wallpapers.LATEST_DAILY)
             .put("screensaver", Wallpapers.screensaver.key)
+            // Whether there is a key, never the key.
+            .put("unsplash", AerialSettings.unsplashKey.isNotBlank())
             .put("focusStyle", AerialSettings.focusStyle.key)
             .put("wallpapers", list)
             .put("apps", JSONArray().apply {
@@ -214,6 +224,9 @@ class PhoneServer private constructor(private val context: Context, private val 
     companion object {
         const val PORT = 8790
         private const val TAG = "AerialPhone"
+
+        /** An Unsplash Access Key: letters, digits, dashes and underscores. */
+        private val UNSPLASH_KEY = Regex("[A-Za-z0-9_-]{20,100}")
         /** Enough for a batch of phone photos at full size. */
         private const val MAX_UPLOAD = 200L * 1024 * 1024
 
