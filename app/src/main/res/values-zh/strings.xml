@@ -89,6 +89,16 @@
     <string name="wp_builtin">内置</string>
     <string name="wp_live">航拍 · 停在主屏幕 10 秒后播放</string>
     <string name="wp_photos">我的照片</string>
+    <string name="wp_mix_row">自动更换</string>
+    <string name="wp_mix">自动轮换</string>
+    <string name="wp_mix_sources">来源</string>
+    <string name="wp_mix_source_bing">必应</string>
+    <string name="wp_mix_source_commons">维基共享资源</string>
+    <string name="wp_mix_source_nasa">NASA</string>
+    <string name="wp_mix_every">更换间隔</string>
+    <string name="wp_mix_hour">1 小时</string>
+    <string name="wp_mix_day">每天</string>
+    <string name="wp_mix_now">当前：%1$s</string>
     <string name="wp_photos_rotate">每天换一张</string>
     <string name="wp_screensaver">屏幕保护程序</string>
     <string name="ss_aerial">航拍</string>

@@ -64,6 +64,8 @@ import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.settings.UiSounds
 import app.orchard.tv.system.Sounds
 import app.orchard.tv.ui.components.Pressable
+import app.orchard.tv.wallpaper.Mix
+import app.orchard.tv.wallpaper.MixSource
 import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
 import app.orchard.tv.ui.components.liquidGlass
@@ -152,6 +154,34 @@ fun WallpaperSheet(
                     Spacer(Modifier.height(16.dp))
                     SectionTitle(R.string.wp_wallpaper)
                     WallpaperRows()
+
+                    Spacer(Modifier.height(12.dp))
+                    SectionTitle(R.string.wp_mix)
+                    val now = Mix.current?.let { w -> listOfNotNull(w.title, w.caption).joinToString(" — ") }
+                    Group(now?.let { stringResource(R.string.wp_mix_now, it) }) { note ->
+                        SettingRow(R.string.wp_mix_sources, null, note, first = true) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                listOf(
+                                    MixSource.Bing to R.string.wp_mix_source_bing,
+                                    MixSource.Commons to R.string.wp_mix_source_commons,
+                                    MixSource.Nasa to R.string.wp_mix_source_nasa,
+                                ).forEach { (source, label) ->
+                                    Chip(stringResource(label), on = source in AerialSettings.mixSources) { AerialSettings.toggleMixSource(source) }
+                                }
+                            }
+                        }
+                        Choices(
+                            R.string.wp_mix_every, null, note,
+                            AerialSettings.mixMinutesChoices.map { minutes ->
+                                minutes to when (minutes) {
+                                    60 -> stringResource(R.string.wp_mix_hour)
+                                    1440 -> stringResource(R.string.wp_mix_day)
+                                    else -> stringResource(R.string.ss_minutes, minutes)
+                                }
+                            },
+                            AerialSettings.mixMinutes, AerialSettings::chooseMixMinutes,
+                        )
+                    }
 
                     Spacer(Modifier.height(12.dp))
                     SectionTitle(R.string.st_home_layout)
@@ -270,6 +300,7 @@ private fun WallpaperRows() {
     val daily = items.filter { it.kind == WallpaperKind.Daily }
     val rows = buildList {
         add(R.string.wp_live to items.filter { it.kind == WallpaperKind.Live })
+        add(R.string.wp_mix_row to listOf(Wallpaper(Wallpapers.MIX, WallpaperKind.Mix, stringResource(R.string.wp_mix))))
         if (daily.isNotEmpty()) {
             add(R.string.wp_daily to listOf(Wallpaper(Wallpapers.LATEST_DAILY, WallpaperKind.Daily, stringResource(R.string.wp_daily_latest))) + daily)
         }
