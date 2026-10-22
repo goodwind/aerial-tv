@@ -274,6 +274,14 @@ class MainActivity : ComponentActivity() {
     // ---- Screensaver: Aerial's own, before the firmware's ad-carrying one can start ----
 
     private val idleHandler = Handler(Looper.getMainLooper())
+
+    /** While Home is up, the auto wallpaper is asked every half minute whether its time has come. */
+    private val mixTick = object : Runnable {
+        override fun run() {
+            Wallpapers.rotateIfDue()
+            idleHandler.postDelayed(this, 30_000)
+        }
+    }
     private val showScreensaver = Runnable {
         DiagLog.i("screensaver starts (${Wallpapers.screensaver})")
         vm.screensaverVisible = true
@@ -403,6 +411,8 @@ class MainActivity : ComponentActivity() {
         vm.resumed = true
         DiagLog.i("onResume; screensaver after ${idleBeforeScreensaver() / 1000} s")
         restartIdleTimer()
+        idleHandler.removeCallbacks(mixTick)
+        idleHandler.postDelayed(mixTick, 30_000)
         GuardSetup.setHomeInFront(this, true)
         HomeGuardService.onAerialResumed()
         Updates.onHomeResumed()
@@ -418,6 +428,7 @@ class MainActivity : ComponentActivity() {
         DiagLog.i("onPause")
         GuardSetup.setHomeInFront(this, false)
         idleHandler.removeCallbacks(showScreensaver)
+        idleHandler.removeCallbacks(mixTick)
         hideScreensaver()
     }
 
