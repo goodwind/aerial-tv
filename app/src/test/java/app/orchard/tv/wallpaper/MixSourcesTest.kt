@@ -69,4 +69,55 @@ class MixSourcesTest {
         assertTrue(MixSources.commonsUrl("Featured pictures of landscapes", null).contains("iiurlwidth=3840"))
         assertTrue(MixSources.commonsUrl("Featured pictures of landscapes", "20260608|1").contains("gcmcontinue="))
     }
+
+    @Test
+    fun themesPickCommonsCategories() {
+        assertEquals(5, MixSources.commonsCategories(emptySet()).size)
+        assertEquals(listOf("Featured pictures of landscapes"), MixSources.commonsCategories(setOf(MixTheme.Nature)))
+        assertEquals(
+            listOf("Featured pictures of cityscapes", "Featured pictures of architecture"),
+            MixSources.commonsCategories(setOf(MixTheme.City)),
+        )
+        assertEquals(listOf("Featured pictures of beaches"), MixSources.commonsCategories(setOf(MixTheme.Sea)))
+    }
+
+    @Test
+    fun themesWithNoMatchGiveNoSource() {
+        assertEquals(emptyList<String>(), MixSources.commonsCategories(setOf(MixTheme.Space)))
+        assertEquals(emptyList<String>(), MixSources.nasaQueries(setOf(MixTheme.Nature)))
+        assertEquals(MixSources.NASA_QUERIES, MixSources.nasaQueries(setOf(MixTheme.Space)))
+        assertEquals(MixSources.NASA_QUERIES, MixSources.nasaQueries(emptySet()))
+    }
+
+    @Test
+    fun unsplashUrlUsesWallpapersTopicWithoutThemes() {
+        val plain = MixSources.unsplashUrl(null)
+        assertTrue(plain.contains("topics=wallpapers"))
+        assertTrue(plain.contains("orientation=landscape"))
+        assertTrue(!plain.contains("query="))
+        assertTrue(MixSources.unsplashUrl(MixTheme.Mountains).contains("query=mountains"))
+        assertTrue(MixSources.unsplashUrl(MixTheme.Space).contains("query=milky+way"))
+    }
+
+    @Test
+    fun parseUnsplashBuildsUrlsCreditAndPing() {
+        val list = MixSources.parseUnsplash(fixture("unsplash.json"))
+        assertEquals(3, list.size)
+        val first = list.first()
+        assertEquals("unsplash:AUPja_8Smd0", first.id)
+        assertEquals(MixSource.Unsplash, first.source)
+        assertTrue(first.url.startsWith("https://images.unsplash.com/") && first.url.endsWith("&w=3840&fm=jpg&q=85"))
+        assertTrue(first.thumb.endsWith("&w=400&fm=jpg"))
+        assertEquals(6000 to 4002, first.width to first.height)
+        assertEquals("Photo by Daniel Seßler on Unsplash", first.credit)
+        assertTrue(first.ping.startsWith("https://api.unsplash.com/photos/AUPja_8Smd0/download"))
+        assertTrue(list[1].title.isNotBlank())
+    }
+
+    @Test
+    fun thumbsAreFilledForEveryParser() {
+        assertTrue(MixSources.parseBing(fixture("bing.json")).all { it.thumb.endsWith("_400x240.jpg") })
+        assertTrue(MixSources.parseNasa(fixture("nasa.json")).all { it.thumb.endsWith("~thumb.jpg") })
+        assertTrue(MixSources.parseCommons(fixture("commons.json")).all { "/500px-" in it.thumb })
+    }
 }

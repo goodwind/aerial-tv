@@ -129,4 +129,18 @@ class MixPickTest {
         assertEquals(listOf(p), MixPick.readPictures(MixPick.writePictures(listOf(p))))
         assertEquals(emptyList<MixPicture>(), MixPick.readPictures("not json"))
     }
+
+    @Test
+    fun pictureJsonKeepsThumbAndPing() {
+        val p = MixPicture("unsplash:x", MixSource.Unsplash, "https://u.test/x", 6000, 4000, "T", "C", thumb = "https://u.test/t", ping = "https://u.test/p")
+        assertEquals(p, MixPick.readPicture(MixPick.writePicture(p)))
+    }
+
+    @Test
+    fun oldPictureJsonStillReads() {
+        val old = """{"id":"bing:1","source":"bing","url":"u","width":1,"height":2,"title":"t","credit":"c"}"""
+        val p = MixPick.readPicture(old)!!
+        assertEquals("", p.thumb)
+        assertEquals("", p.ping)
+    }
 }

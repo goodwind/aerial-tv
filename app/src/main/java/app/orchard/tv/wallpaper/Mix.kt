@@ -214,7 +214,7 @@ object Mix {
             val market = if (Locale.getDefault().language == "zh") "zh-CN" else "en-US"
             listOf(0, 8).flatMap { runCatching { MixSources.parseBing(text(MixSources.bingUrl(it, market))) }.getOrDefault(emptyList()) }
         }
-        MixSource.Commons -> MixSources.COMMONS_CATEGORIES.flatMap { category ->
+        MixSource.Commons -> MixSources.commonsCategories(emptySet()).flatMap { category ->
             val cursors = cursors()
             val json = text(MixSources.commonsUrl(category, cursors.optString(category).ifEmpty { null }))
             val next = JSONObject(json).optJSONObject("continue")?.optString("gcmcontinue").orEmpty()
@@ -225,6 +225,7 @@ object Mix {
             val query = MixSources.NASA_QUERIES.random()
             MixSources.parseNasa(text(MixSources.nasaUrl(query, Random.nextInt(1, 4))))
         }
+        MixSource.Unsplash, MixSource.Mine -> emptyList() // task 8
     }
 
     private fun text(url: String) = fetch(url).decodeToString()

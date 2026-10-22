@@ -5,14 +5,26 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 enum class MixSource(val key: String) {
-    Bing("bing"), Commons("commons"), Nasa("nasa");
+    Bing("bing"), Commons("commons"), Nasa("nasa"), Unsplash("unsplash"), Mine("mine");
 
     companion object {
         fun of(key: String): MixSource? = entries.firstOrNull { it.key == key }
     }
 }
 
-/** [width] and [height] are 0 when the source does not say how big the picture is. */
+/** What the pictures are of; the sources that have such pictures are asked for them (see [MixSources]). */
+enum class MixTheme(val key: String) {
+    Nature("nature"), City("city"), Mountains("mountains"), Space("space"), Sea("sea");
+
+    companion object {
+        fun of(key: String): MixTheme? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * [width] and [height] are 0 when the source does not say how big the picture is. [thumb] is a small
+ * version for the rows of pictures; [ping] is Unsplash's address to tell that the picture was used.
+ */
 data class MixPicture(
     val id: String,
     val source: MixSource,
@@ -21,6 +33,8 @@ data class MixPicture(
     val height: Int,
     val title: String,
     val credit: String,
+    val thumb: String = "",
+    val ping: String = "",
 )
 
 /** Which picture the auto wallpaper shows next, and when. No Android here, so it is tested on the JVM. */
@@ -90,9 +104,11 @@ object MixPick {
     private fun pictureJson(p: MixPicture) = JSONObject()
         .put("id", p.id).put("source", p.source.key).put("url", p.url)
         .put("width", p.width).put("height", p.height).put("title", p.title).put("credit", p.credit)
+        .put("thumb", p.thumb).put("ping", p.ping)
 
     private fun pictureOf(o: JSONObject) = MixPicture(
         o.getString("id"), MixSource.of(o.getString("source")) ?: error("source"), o.getString("url"),
         o.getInt("width"), o.getInt("height"), o.getString("title"), o.getString("credit"),
+        o.optString("thumb"), o.optString("ping"),
     )
 }

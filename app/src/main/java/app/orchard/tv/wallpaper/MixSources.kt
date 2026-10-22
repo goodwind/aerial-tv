@@ -8,11 +8,30 @@ import org.json.JSONObject
  * network here (the callers fetch), so it is tested on the JVM against saved answers.
  */
 object MixSources {
-    val COMMONS_CATEGORIES = listOf(
-        "Featured pictures of landscapes",
-        "Featured pictures of cityscapes",
-        "Featured pictures of mountains",
+    private val COMMONS_BY_THEME = mapOf(
+        MixTheme.Nature to listOf("landscapes"),
+        MixTheme.City to listOf("cityscapes", "architecture"),
+        MixTheme.Mountains to listOf("mountains"),
+        MixTheme.Sea to listOf("beaches"),
     )
+
+    /** The Commons categories for the chosen themes; none chosen means all. A theme with no category gives none. */
+    fun commonsCategories(themes: Set<MixTheme>): List<String> =
+        MixTheme.entries.filter { themes.isEmpty() || it in themes }
+            .flatMap { COMMONS_BY_THEME[it].orEmpty() }.map { "Featured pictures of $it" }
+
+    fun nasaQueries(themes: Set<MixTheme>): List<String> =
+        if (themes.isEmpty() || MixTheme.Space in themes) NASA_QUERIES else emptyList()
+
+    private val UNSPLASH_QUERY = mapOf(
+        MixTheme.Nature to "landscape", MixTheme.City to "cityscape", MixTheme.Mountains to "mountains",
+        MixTheme.Space to "milky way", MixTheme.Sea to "sea",
+    )
+
+    /** Without a theme the curated "wallpapers" topic: a plain search for "nature" also finds people. */
+    fun unsplashUrl(theme: MixTheme?, count: Int = 30): String =
+        "https://api.unsplash.com/photos/random?count=$count&orientation=landscape" +
+            (theme?.let { "&query=${enc(UNSPLASH_QUERY.getValue(it))}" } ?: "&topics=wallpapers")
 
     /** NASA's image library has no "best of"; these searches give pictures that suit a wall. */
     val NASA_QUERIES = listOf("nebula", "galaxy", "earth from space", "aurora", "milky way", "james webb")
@@ -42,6 +61,7 @@ object MixSources {
                 width = 3840, height = 2160,
                 title = img.optString("title").ifBlank { copyright.substringBefore(" (") },
                 credit = copyright,
+                thumb = "https://cn.bing.com" + img.getString("urlbase") + "_400x240.jpg",
             )
         }
     }
@@ -67,6 +87,27 @@ object MixSources {
                 width = w, height = h,
                 title = data.optString("title"),
                 credit = if (photographer.isEmpty()) "NASA" else "$photographer / NASA",
+                thumb = orig.getString("href").replace("http://", "https://").replace("~orig.jpg", "~thumb.jpg"),
+            )
+        }
+    }
+
+    /** Photos from `/photos/random`, with the big picture and a small one cut from the same raw address. */
+    fun parseUnsplash(json: String): List<MixPicture> {
+        val photos = org.json.JSONArray(json)
+        return (0 until photos.length()).map { photos.getJSONObject(it) }.map { photo ->
+            val raw = photo.getJSONObject("urls").getString("raw")
+            val author = photo.getJSONObject("user").getString("name")
+            MixPicture(
+                id = "unsplash:" + photo.getString("id"),
+                source = MixSource.Unsplash,
+                url = "$raw&w=3840&fm=jpg&q=85",
+                width = photo.optInt("width"), height = photo.optInt("height"),
+                title = listOf("description", "alt_description").map { photo.optString(it).takeIf { s -> s != "null" }.orEmpty() }
+                    .firstOrNull { it.isNotBlank() } ?: "Unsplash",
+                credit = "Photo by $author on Unsplash",
+                thumb = "$raw&w=400&fm=jpg",
+                ping = photo.getJSONObject("links").optString("download_location"),
             )
         }
     }
@@ -89,6 +130,7 @@ object MixSources {
                 width = w, height = h,
                 title = field("ObjectName").ifBlank { title.removePrefix("File:").substringBeforeLast('.') },
                 credit = listOf(field("Artist"), field("LicenseShortName")).filter { it.isNotBlank() }.joinToString(" · "),
+                thumb = info.optString("thumburl").replace("/3840px-", "/500px-"),
             )
         }.sortedBy { it.id }.toList()
     }
