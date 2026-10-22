@@ -57,4 +57,14 @@ object MixPick {
     }.getOrDefault(emptySet())
 
     fun writeHistory(shown: Set<String>): String = JSONArray(shown.toList()).toString()
+
+    /** The chosen sources as kept in the settings; anything unreadable or empty means Bing alone. */
+    fun parseSources(text: String?): Set<MixSource> =
+        text.orEmpty().split(',').mapNotNull { MixSource.of(it.trim()) }.toSet().ifEmpty { setOf(MixSource.Bing) }
+
+    fun writeSources(sources: Set<MixSource>): String = sources.joinToString(",") { it.key }
+
+    /** [source] added or removed, except that the last one stays: with none there would be nothing to show. */
+    fun toggled(sources: Set<MixSource>, source: MixSource): Set<MixSource> =
+        if (source in sources) (sources - source).ifEmpty { sources } else sources + source
 }

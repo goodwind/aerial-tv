@@ -86,4 +86,26 @@ class MixPickTest {
         val ids = setOf("bing:20261022", "commons:File:A b.jpg")
         assertEquals(ids, MixPick.parseHistory(MixPick.writeHistory(ids)))
     }
+
+    @Test
+    fun unknownOrEmptySourcesFallBackToBing() {
+        assertEquals(setOf(MixSource.Bing), MixPick.parseSources(null))
+        assertEquals(setOf(MixSource.Bing), MixPick.parseSources(""))
+        assertEquals(setOf(MixSource.Bing), MixPick.parseSources("flickr"))
+    }
+
+    @Test
+    fun sourcesSurviveRoundTrip() {
+        val all = setOf(MixSource.Commons, MixSource.Nasa)
+        assertEquals(all, MixPick.parseSources(MixPick.writeSources(all)))
+    }
+
+    @Test
+    fun toggleAddsAndRemovesButKeepsTheLast() {
+        val bing = setOf(MixSource.Bing)
+        val both = MixPick.toggled(bing, MixSource.Nasa)
+        assertEquals(setOf(MixSource.Bing, MixSource.Nasa), both)
+        assertEquals(setOf(MixSource.Nasa), MixPick.toggled(both, MixSource.Bing))
+        assertEquals(bing, MixPick.toggled(bing, MixSource.Bing))
+    }
 }
