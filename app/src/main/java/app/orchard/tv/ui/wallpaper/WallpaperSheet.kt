@@ -332,7 +332,8 @@ private fun WallpaperRows() {
 @Composable
 private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?) {
     val selected = Wallpapers.selectedId == wp.id
-    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items) {
+    // The auto wallpaper's card shows the picture on the wall, so it is asked again when that changes.
+    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items, Mix.current) {
         value = withContext(Dispatchers.Default) { Wallpapers.thumbnail(wp.id)?.asImageBitmap() }
     }
     Pressable(onClick = { Wallpapers.select(wp.id) }, focusRequester = focusRequester, focusedScale = 1.08f) { state ->
