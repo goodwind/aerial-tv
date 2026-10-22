@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,9 +64,14 @@ import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.settings.UiSounds
 import app.orchard.tv.system.Sounds
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.window.Dialog
 import app.orchard.tv.ui.components.Pressable
+import app.orchard.tv.ui.components.isSelect
 import app.orchard.tv.wallpaper.Mix
 import app.orchard.tv.wallpaper.MixSource
+import app.orchard.tv.wallpaper.MixTheme
 import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
 import app.orchard.tv.ui.components.liquidGlass
@@ -167,6 +173,31 @@ fun WallpaperSheet(
                                     MixSource.Nasa to R.string.wp_mix_source_nasa,
                                 ).forEach { (source, label) ->
                                     Chip(stringResource(label), on = source in AerialSettings.mixSources) { AerialSettings.toggleMixSource(source) }
+                                }
+                            }
+                        }
+                        // Unsplash needs the owner's key, which is given on the phone page.
+                        SettingRow(R.string.wp_mix_more, if (AerialSettings.unsplashKey.isBlank()) stringResource(R.string.wp_mix_unsplash_hint) else null, note) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Chip(
+                                    stringResource(R.string.wp_mix_source_unsplash),
+                                    on = MixSource.Unsplash in AerialSettings.mixSources && AerialSettings.unsplashKey.isNotBlank(),
+                                ) { if (AerialSettings.unsplashKey.isNotBlank()) AerialSettings.toggleMixSource(MixSource.Unsplash) }
+                                Chip(stringResource(R.string.wp_mix_source_mine), on = MixSource.Mine in AerialSettings.mixSources) {
+                                    AerialSettings.toggleMixSource(MixSource.Mine)
+                                }
+                            }
+                        }
+                        SettingRow(R.string.wp_mix_themes, stringResource(R.string.wp_mix_themes_hint), note) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                listOf(
+                                    MixTheme.Nature to R.string.wp_mix_theme_nature,
+                                    MixTheme.City to R.string.wp_mix_theme_city,
+                                    MixTheme.Mountains to R.string.wp_mix_theme_mountains,
+                                    MixTheme.Space to R.string.wp_mix_theme_space,
+                                    MixTheme.Sea to R.string.wp_mix_theme_sea,
+                                ).forEach { (theme, label) ->
+                                    Chip(stringResource(label), on = theme in AerialSettings.mixThemes) { AerialSettings.toggleMixTheme(theme) }
                                 }
                             }
                         }
@@ -301,6 +332,16 @@ private fun WallpaperRows() {
     val rows = buildList {
         add(R.string.wp_live to items.filter { it.kind == WallpaperKind.Live })
         add(R.string.wp_mix_row to listOf(Wallpaper(Wallpapers.MIX, WallpaperKind.Mix, stringResource(R.string.wp_mix))))
+        // The pictures of each chosen source, to pick one that then stays; a long press keeps or hides it.
+        listOf(
+            MixSource.Commons to R.string.wp_row_commons,
+            MixSource.Nasa to R.string.wp_row_nasa,
+            MixSource.Unsplash to R.string.wp_row_unsplash,
+        ).forEach { (source, title) ->
+            if (source !in AerialSettings.mixSources || source == MixSource.Unsplash && AerialSettings.unsplashKey.isBlank()) return@forEach
+            val pictures = Mix.gallery(source)
+            if (pictures.isNotEmpty()) add(title to pictures.map { Wallpaper("mix:${it.id}", WallpaperKind.Mix, it.title, it.credit) })
+        }
         if (daily.isNotEmpty()) {
             add(R.string.wp_daily to listOf(Wallpaper(Wallpapers.LATEST_DAILY, WallpaperKind.Daily, stringResource(R.string.wp_daily_latest))) + daily)
         }
@@ -309,6 +350,8 @@ private fun WallpaperRows() {
         }
         add(R.string.wp_builtin to items.filter { it.kind == WallpaperKind.Builtin || it.kind == WallpaperKind.Auto })
     }
+    var menu by remember { mutableStateOf<Wallpaper?>(null) }
+    menu?.let { WallpaperMenu(it) { menu = null } }
     rows.forEachIndexed { r, (title, list) ->
         BasicText(stringResource(title), style = Type.Callout)
         Spacer(Modifier.height(8.dp))
@@ -320,7 +363,9 @@ private fun WallpaperRows() {
             contentPadding = PaddingValues(start = 14.dp, end = 24.dp, top = 6.dp, bottom = 4.dp),
         ) {
             items(list, key = { it.id }) { wp ->
-                WallpaperCard(wp, if (r == 0 && wp === list.first()) first else null)
+                // The auto wallpaper's own card has nothing to keep or hide; the pictures of the rows and "My Photos" do.
+                val hasMenu = wp.kind == WallpaperKind.Photo || wp.kind == WallpaperKind.Mix && wp.id != Wallpapers.MIX
+                WallpaperCard(wp, if (r == 0 && wp === list.first()) first else null, if (hasMenu) ({ menu = wp }) else null)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -328,13 +373,23 @@ private fun WallpaperRows() {
 }
 
 @Composable
-private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?) {
+private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?, onMenu: (() -> Unit)?) {
     val selected = Wallpapers.selectedId == wp.id
     // The auto wallpaper's card shows the picture on the wall, so it is asked again when that changes.
-    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items, Mix.current) {
+    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items, Mix.current, Mix.galleryVersion) {
         value = withContext(Dispatchers.Default) { Wallpapers.thumbnail(wp.id)?.asImageBitmap() }
     }
-    Pressable(onClick = { Wallpapers.select(wp.id) }, focusRequester = focusRequester, focusedScale = 1.08f) { state ->
+    // Holding OK opens the menu; the key-up that ends that press must not also choose the picture.
+    var held by remember { mutableStateOf(false) }
+    Pressable(
+        onClick = { if (held) held = false else Wallpapers.select(wp.id) },
+        focusRequester = focusRequester,
+        focusedScale = 1.08f,
+        onKey = { e ->
+            if (onMenu == null || !e.isSelect() || e.type != KeyEventType.KeyDown || e.nativeKeyEvent.repeatCount == 0 || held) false
+            else { held = true; onMenu(); true }
+        },
+    ) { state ->
         Column(Modifier.width(168.dp)) {
             Box(
                 Modifier
@@ -372,6 +427,32 @@ private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?) {
                 wp.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = Type.Caption.copy(color = if (state.focused) Palette.Label else Palette.SecondaryLabel),
             )
+        }
+    }
+}
+
+/** What can be done to a picture: keep it in "My Photos" and hide it, or (for a photo of one's own) delete it. */
+@Composable
+private fun WallpaperMenu(wp: Wallpaper, onDismiss: () -> Unit) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        runCatching { first.requestFocus() }
+    }
+    val pictureId = wp.id.removePrefix("mix:")
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xF22C2C2E)).padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            BasicText(wp.title, style = Type.Headline, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 520.dp))
+            wp.caption?.let { BasicText(it, style = Type.Caption.copy(color = Palette.SecondaryLabel), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 520.dp)) }
+            if (wp.kind == WallpaperKind.Mix) {
+                Chip(stringResource(R.string.wp_menu_save), on = false, focusRequester = first) { Mix.save(pictureId); onDismiss() }
+                Chip(stringResource(R.string.wp_menu_hide), on = false) { Mix.hide(pictureId); onDismiss() }
+            } else {
+                Chip(stringResource(R.string.wp_menu_delete), on = false, focusRequester = first) { Wallpapers.deletePhoto(wp.id); onDismiss() }
+            }
         }
     }
 }
@@ -481,8 +562,8 @@ private fun WeatherValue() {
 
 /** A pill to pick one of a few options: a check on the chosen one, white when focused. */
 @Composable
-private fun Chip(label: String, on: Boolean, onFocused: (() -> Unit)? = null, onClick: () -> Unit) {
-    Pressable(onClick = onClick, focusedScale = 1.06f) { state ->
+private fun Chip(label: String, on: Boolean, onFocused: (() -> Unit)? = null, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
+    Pressable(onClick = onClick, focusRequester = focusRequester, focusedScale = 1.06f) { state ->
         if (onFocused != null) LaunchedEffect(state.focused) { if (state.focused) onFocused() }
         val bg by animateColorAsState(
             when {
