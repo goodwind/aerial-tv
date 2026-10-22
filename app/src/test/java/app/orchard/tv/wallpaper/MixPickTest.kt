@@ -108,4 +108,25 @@ class MixPickTest {
         assertEquals(setOf(MixSource.Nasa), MixPick.toggled(both, MixSource.Bing))
         assertEquals(bing, MixPick.toggled(bing, MixSource.Bing))
     }
+
+    @Test
+    fun rejectedDownloadIsRecordedSoItIsNotTriedAgain() {
+        assertEquals(setOf("a", "b"), MixPick.afterDownload(ok = false, id = "b", shown = setOf("a")))
+        assertEquals(setOf("a"), MixPick.afterDownload(ok = true, id = "b", shown = setOf("a")))
+    }
+
+    @Test
+    fun emptyPoolFallsBackToDailyThenBuiltIn() {
+        assertEquals(listOf("daily:latest", "grad:aurora"), MixPick.fallbackOrder(hasDaily = true))
+        assertEquals(listOf("grad:aurora"), MixPick.fallbackOrder(hasDaily = false))
+    }
+
+    @Test
+    fun pictureSurvivesJsonRoundTrip() {
+        val p = MixPicture("commons:File:A.jpg", MixSource.Commons, "https://x.test/a.jpg", 5184, 3456, "A & B", "Jane · CC BY-SA 4.0")
+        assertEquals(p, MixPick.readPicture(MixPick.writePicture(p)))
+        assertNull(MixPick.readPicture("{broken"))
+        assertEquals(listOf(p), MixPick.readPictures(MixPick.writePictures(listOf(p))))
+        assertEquals(emptyList<MixPicture>(), MixPick.readPictures("not json"))
+    }
 }

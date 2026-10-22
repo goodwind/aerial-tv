@@ -26,7 +26,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-enum class WallpaperKind { Daily, Builtin, Photo, Auto, Live }
+enum class WallpaperKind { Daily, Builtin, Photo, Auto, Live, Mix }
 
 data class Wallpaper(
     val id: String,
@@ -54,6 +54,8 @@ enum class ScreensaverMode(val key: String) {
  * - Photos: pictures uploaded from a phone through the setup page ([PhoneServer]). "photos:rotate"
  *   shows a different one of them each day (issue #27).
  * - Auto: the previous behaviour, light taken from the focused app's artwork.
+ * - Mix: the auto wallpaper, a new picture from Bing, Wikimedia Commons and NASA every few minutes
+ *   ([Mix]); "mix:auto" is the card, "mix:<picture id>" the picture on the wall.
  * - Live: Apple's aerial films, moving once Home has sat still a while (ui/home/LiveWallpaper.kt).
  *   Its picture is the frame the film last stopped on, so the glass and the grid match it.
  *
@@ -65,6 +67,7 @@ object Wallpapers {
     const val AUTO = "auto"
     const val ROTATE_PHOTOS = "photos:rotate"
     const val LIVE = "aerial:live"
+    const val MIX = "mix:auto"
     private const val DEFAULT_FALLBACK = "grad:aurora"
 
     private lateinit var app: Context
@@ -108,9 +111,11 @@ object Wallpapers {
             // A built-in wallpaper from before the Mac-style set: its nearest one now.
             .let { if (it.startsWith("grad:")) "grad:" + Gradients.currentKey(it.removePrefix("grad:")) else it }
         screensaver = ScreensaverMode.of(prefs.getString("screensaver", null))
+        Mix.init(context)
         rebuildList()
         rebuildBackdrop()
         scope.launch { refreshDaily() }
+        if (selectedId == MIX) Mix.onSelected()
         scope.launch(Dispatchers.IO) { clearStaleUploads() }
     }
 
@@ -132,6 +137,13 @@ object Wallpapers {
         selectedId = id
         prefs.edit { putString("selected", id) }
         rebuildBackdrop()
+        if (id == MIX) Mix.onSelected()
+    }
+
+    /** The auto wallpaper put up a new picture. */
+    fun mixChanged() {
+        synchronized(thumbs) { thumbs.remove(MIX) }
+        if (selectedId == MIX) rebuildBackdrop()
     }
 
     fun chooseScreensaver(mode: ScreensaverMode) {
@@ -142,6 +154,7 @@ object Wallpapers {
     /** The concrete wallpaper the selection points at today. */
     fun resolve(id: String = selectedId): Wallpaper? = when (id) {
         LATEST_DAILY -> items.firstOrNull { it.kind == WallpaperKind.Daily }
+        MIX -> Mix.current ?: MixPick.fallbackOrder(items.any { it.kind == WallpaperKind.Daily }).firstNotNullOfOrNull { resolve(it) }
         ROTATE_PHOTOS -> items.filter { it.kind == WallpaperKind.Photo }.sortedBy { it.id }.let { photos ->
             if (photos.isEmpty()) resolve(LATEST_DAILY) else photos[Math.floorMod(today(), photos.size)]
         }
@@ -155,7 +168,9 @@ object Wallpapers {
 
     /** Moves "My Photos, rotating" on to today's photo; Aerial calls it whenever Home comes back. */
     fun rotateIfDue() {
-        if (!started || selectedId != ROTATE_PHOTOS || rotatedOn == today()) return
+        if (!started) return
+        if (selectedId == MIX) Mix.rotateIfDue()
+        if (selectedId != ROTATE_PHOTOS || rotatedOn == today()) return
         rebuildBackdrop()
     }
 
@@ -164,13 +179,14 @@ object Wallpapers {
     private fun fileFor(w: Wallpaper): File? = when (w.kind) {
         WallpaperKind.Daily -> File(dailyDir, w.id.removePrefix("daily:") + ".jpg")
         WallpaperKind.Photo -> File(photoDir, w.id.removePrefix("photo:") + ".jpg")
+        WallpaperKind.Mix -> Mix.fileFor(w.id)
         else -> null
     }
 
     /** Full picture at [w]×[h] without shading, for the photo screensaver. Call off the main thread. */
     fun picture(wp: Wallpaper, w: Int, h: Int): Bitmap? = when (wp.kind) {
         WallpaperKind.Builtin -> Gradients.byKey(wp.id.removePrefix("grad:"))?.let { Gradients.render(it, w, h) }
-        WallpaperKind.Daily, WallpaperKind.Photo -> fileFor(wp)?.takeIf { it.exists() }?.let { Images.decodeCover(it, w, h) }
+        WallpaperKind.Daily, WallpaperKind.Photo, WallpaperKind.Mix -> fileFor(wp)?.takeIf { it.exists() }?.let { Images.decodeCover(it, w, h) }
         WallpaperKind.Auto -> null
         // Until a film has stopped on a frame, the first built-in stands in.
         WallpaperKind.Live -> liveFrame.takeIf { it.exists() }?.let { Images.decodeCover(it, w, h) }
@@ -180,7 +196,7 @@ object Wallpapers {
     /** A 16:9 thumbnail for pickers and the phone page. Call off the main thread. */
     fun thumbnail(id: String): Bitmap? {
         synchronized(thumbs) { thumbs[id] }?.let { return it }
-        val wp = (if (id == LATEST_DAILY || id == ROTATE_PHOTOS) resolve(id) else items.firstOrNull { it.id == id }) ?: return null
+        val wp = (if (id == LATEST_DAILY || id == ROTATE_PHOTOS || id == MIX) resolve(id) else items.firstOrNull { it.id == id }) ?: return null
         val b = if (wp.kind == WallpaperKind.Auto) Gradients.render(Gradients.autoThumb, 384, 216) else picture(wp, 384, 216)
         if (b != null) synchronized(thumbs) { thumbs[id] = b }
         return b
@@ -237,7 +253,8 @@ object Wallpapers {
             .map { Wallpaper("photo:${it.nameWithoutExtension}", WallpaperKind.Photo, if (zh) "我的照片" else "My Photo") }
         val auto = Wallpaper(AUTO, WallpaperKind.Auto, if (zh) "跟随 App" else "Follow App")
         val live = Wallpaper(LIVE, WallpaperKind.Live, if (zh) "航拍" else "Aerial")
-        items = listOf(live) + daily + builtins + photos + auto
+        val mix = Wallpaper(MIX, WallpaperKind.Mix, if (zh) "自动轮换" else "Auto Wallpapers")
+        items = listOf(live, mix) + daily + builtins + photos + auto
     }
 
     // ---- daily photos ----

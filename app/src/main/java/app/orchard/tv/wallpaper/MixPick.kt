@@ -2,6 +2,7 @@ package app.orchard.tv.wallpaper
 
 import kotlin.random.Random
 import org.json.JSONArray
+import org.json.JSONObject
 
 enum class MixSource(val key: String) {
     Bing("bing"), Commons("commons"), Nasa("nasa");
@@ -67,4 +68,31 @@ object MixPick {
     /** [source] added or removed, except that the last one stays: with none there would be nothing to show. */
     fun toggled(sources: Set<MixSource>, source: MixSource): Set<MixSource> =
         if (source in sources) (sources - source).ifEmpty { sources } else sources + source
+
+    /** A picture that would not download or decode goes into the history too, so it is not tried again. */
+    fun afterDownload(ok: Boolean, id: String, shown: Set<String>): Set<String> = if (ok) shown else shown + id
+
+    /** What the wallpaper is until the auto wallpaper has a picture: the daily photo, then a built-in one. */
+    fun fallbackOrder(hasDaily: Boolean): List<String> =
+        (if (hasDaily) listOf("daily:latest") else emptyList()) + "grad:aurora"
+
+    fun writePicture(p: MixPicture): String = pictureJson(p).toString()
+
+    fun readPicture(text: String?): MixPicture? = runCatching { pictureOf(JSONObject(text)) }.getOrNull()
+
+    fun writePictures(list: List<MixPicture>): String = JSONArray(list.map(::pictureJson)).toString()
+
+    fun readPictures(text: String?): List<MixPicture> = runCatching {
+        val arr = JSONArray(text)
+        (0 until arr.length()).mapNotNull { runCatching { pictureOf(arr.getJSONObject(it)) }.getOrNull() }
+    }.getOrDefault(emptyList())
+
+    private fun pictureJson(p: MixPicture) = JSONObject()
+        .put("id", p.id).put("source", p.source.key).put("url", p.url)
+        .put("width", p.width).put("height", p.height).put("title", p.title).put("credit", p.credit)
+
+    private fun pictureOf(o: JSONObject) = MixPicture(
+        o.getString("id"), MixSource.of(o.getString("source")) ?: error("source"), o.getString("url"),
+        o.getInt("width"), o.getInt("height"), o.getString("title"), o.getString("credit"),
+    )
 }
