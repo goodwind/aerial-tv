@@ -120,4 +120,18 @@ class MixSourcesTest {
         assertTrue(MixSources.parseNasa(fixture("nasa.json")).all { it.thumb.endsWith("~thumb.jpg") })
         assertTrue(MixSources.parseCommons(fixture("commons.json")).all { "/500px-" in it.thumb })
     }
+
+    @Test
+    fun unsplashWithoutKeyIsSkipped() {
+        val all = setOf(MixSource.Bing, MixSource.Unsplash)
+        assertEquals(setOf(MixSource.Bing), MixSources.activeSources(emptySet(), all, unsplashKey = ""))
+        assertEquals(all, MixSources.activeSources(emptySet(), all, unsplashKey = "k"))
+    }
+
+    @Test
+    fun sourcesWithNothingForTheThemesDropOut() {
+        val all = setOf(MixSource.Bing, MixSource.Commons, MixSource.Nasa, MixSource.Mine)
+        assertEquals(setOf(MixSource.Bing, MixSource.Commons, MixSource.Mine), MixSources.activeSources(setOf(MixTheme.Nature), all, "k"))
+        assertEquals(setOf(MixSource.Bing, MixSource.Nasa, MixSource.Mine), MixSources.activeSources(setOf(MixTheme.Space), all, "k"))
+    }
 }

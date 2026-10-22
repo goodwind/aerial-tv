@@ -285,10 +285,6 @@ function render() {
     if (kind === 'daily' && list.length) {
       list = [{ id: state.latestDaily, kind: 'daily', title: '每日自动更新', caption: '总是使用当天的照片' }, ...list];
     }
-    // Two or more photos: one a day, as on the TV (#27, #194).
-    if (kind === 'photo' && list.length > 1) {
-      list = [{ id: state.rotatePhotos, kind: 'photos', title: '每天换一张', caption: '每天自动换成下一张照片' }, ...list];
-    }
     if (!list.length && kind !== 'photo') continue;
     const h = document.createElement('h2'); h.textContent = title; root.appendChild(h);
     if (!list.length) {

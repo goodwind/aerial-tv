@@ -305,9 +305,7 @@ private fun WallpaperRows() {
             add(R.string.wp_daily to listOf(Wallpaper(Wallpapers.LATEST_DAILY, WallpaperKind.Daily, stringResource(R.string.wp_daily_latest))) + daily)
         }
         items.filter { it.kind == WallpaperKind.Photo }.takeIf { it.isNotEmpty() }?.let { photos ->
-            // With two or more, the first card takes turns through all of them, one a day (#27).
-            val rotate = if (photos.size > 1) listOf(Wallpaper(Wallpapers.ROTATE_PHOTOS, WallpaperKind.Photo, stringResource(R.string.wp_photos_rotate))) else emptyList()
-            add(R.string.wp_photos to rotate + photos)
+            add(R.string.wp_photos to photos)
         }
         add(R.string.wp_builtin to items.filter { it.kind == WallpaperKind.Builtin || it.kind == WallpaperKind.Auto })
     }

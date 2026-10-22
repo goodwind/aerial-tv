@@ -143,4 +143,32 @@ class MixPickTest {
         assertEquals("", p.thumb)
         assertEquals("", p.ping)
     }
+
+    @Test
+    fun hiddenNeverComesBack() {
+        val pool = pool(4)
+        val visible = MixPick.withoutHidden(pool, setOf("p2", "p3"))
+        assertEquals(listOf("p1", "p4"), visible.map { it.id })
+        var shown = emptySet<String>()
+        repeat(10) {
+            val r = MixPick.next(visible, shown, null, Random(it))!!
+            assertTrue(r.picture.id in setOf("p1", "p4"))
+            shown = r.shown
+        }
+    }
+
+    @Test
+    fun savedNameIsStableShortAndDistinct() {
+        val a = MixPick.savedName("commons:File:A.jpg")
+        assertEquals(a, MixPick.savedName("commons:File:A.jpg"))
+        assertNotEquals(a, MixPick.savedName("commons:File:B.jpg"))
+        assertTrue(Regex("^[0-9a-f]{12}$").matches(a))
+    }
+
+    @Test
+    fun migratesOnePhotoADay() {
+        assertEquals("mix:auto" to 1440, MixPick.migrateSelected("photos:rotate"))
+        assertNull(MixPick.migrateSelected("daily:latest"))
+        assertNull(MixPick.migrateSelected("mix:auto"))
+    }
 }

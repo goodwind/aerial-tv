@@ -111,4 +111,14 @@ object MixPick {
         o.getInt("width"), o.getInt("height"), o.getString("title"), o.getString("credit"),
         o.optString("thumb"), o.optString("ping"),
     )
+
+    fun withoutHidden(pool: List<MixPicture>, hidden: Set<String>): List<MixPicture> = pool.filter { it.id !in hidden }
+
+    /** The file name (without extension) a picture kept in "My Photos" gets: the same for the same picture, so it is kept once. */
+    fun savedName(pictureId: String): String =
+        java.security.MessageDigest.getInstance("SHA-1").digest(pictureId.toByteArray())
+            .joinToString("") { "%02x".format(it) }.take(12)
+
+    /** "One a Day" is gone; where it was chosen the auto wallpaper takes over with "My Photos" once a day. */
+    fun migrateSelected(selected: String): Pair<String, Int>? = if (selected == "photos:rotate") "mix:auto" to 1440 else null
 }

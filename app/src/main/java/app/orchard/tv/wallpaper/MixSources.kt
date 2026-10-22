@@ -23,6 +23,16 @@ object MixSources {
     fun nasaQueries(themes: Set<MixTheme>): List<String> =
         if (themes.isEmpty() || MixTheme.Space in themes) NASA_QUERIES else emptyList()
 
+    /** The chosen sources that can give something now: Unsplash needs a key; Commons and NASA need a category or search for the themes. */
+    fun activeSources(themes: Set<MixTheme>, sources: Set<MixSource>, unsplashKey: String): Set<MixSource> = sources.filter {
+        when (it) {
+            MixSource.Unsplash -> unsplashKey.isNotBlank()
+            MixSource.Commons -> commonsCategories(themes).isNotEmpty()
+            MixSource.Nasa -> nasaQueries(themes).isNotEmpty()
+            else -> true
+        }
+    }.toSet()
+
     private val UNSPLASH_QUERY = mapOf(
         MixTheme.Nature to "landscape", MixTheme.City to "cityscape", MixTheme.Mountains to "mountains",
         MixTheme.Space to "milky way", MixTheme.Sea to "sea",
