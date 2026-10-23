@@ -157,7 +157,7 @@ private class GridMetrics(screenW: Dp, screenH: Dp, oneRow: Boolean, val nameRoo
      * the selected program's title and summary (64dp, then 14dp to the cards).
      */
     val shelfCardH = 96.dp
-    val shelfRowY = topRowY - PlatePadV - 18.dp - shelfCardH - 14.dp - 64.dp
+    val shelfRowY = topRowY - PlatePadV - 18.dp - shelfCardH - 14.dp - ShelfSummaryH
 
     fun slot(index: Int, onTop: Boolean): Pair<Dp, Dp> {
         val row = index / COLUMNS
@@ -552,6 +552,8 @@ fun HomeScreen(
                         toSaver = { toSaver.value },
                     )
                 }
+                // With two rows the shelf reaches the top of the screen: its tabs would meet the corner clock.
+                val clockClash = if (!oneRow && (shelf?.tabs?.size ?: 0) > 1) 1f else 0f
                 if (!clockRight && (!AerialSettings.largeClock || shelfProgress > 0.01f)) {
                     CornerClock(
                         now = now,
@@ -559,7 +561,7 @@ fun HomeScreen(
                             .padding(start = metrics.margin, top = 28.dp)
                             .graphicsLayer {
                                 val p = smallClockShown(shelfProgress)
-                                alpha = scrolledAway(scroll.value, collapsePx) * p
+                                alpha = scrolledAway(scroll.value, collapsePx) * p * (1f - clockClash * shelfProgress)
                                 translationY = (1f - p) * 10.dp.toPx()
                             },
                         toSaver = { toSaver.value },

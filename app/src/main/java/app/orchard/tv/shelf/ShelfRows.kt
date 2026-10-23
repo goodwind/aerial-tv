@@ -21,6 +21,11 @@ data class RawProgram(
     val lastEngagedMillis: Long,
     val positionMillis: Long,
     val durationMillis: Long,
+    /** The owner's id for the title; the same title on two channels shares it. */
+    val contentId: String? = null,
+    /** The season and episode as the owner numbers them (display numbers); blank or 0 for none. */
+    val season: String? = null,
+    val episodeNumber: String? = null,
 )
 
 /** A card on the shelf. */
@@ -34,6 +39,11 @@ data class ShelfItem(
     /** How far through it the owner is, 0..1, for watch-next programs that say. */
     val progress: Float?,
     val intentUri: String,
+    /** Season and episode numbers of a series, as the owner numbers them. */
+    val season: String? = null,
+    val episode: String? = null,
+    /** Time left in what is being watched, where the owner says how far it is. */
+    val leftMillis: Long? = null,
     /** The channel it came from; 0 for watch next, which belongs to no channel. */
     val channel: Long = 0,
     /** That channel's name as its owner gave it; null for watch next. */
@@ -62,8 +72,12 @@ object ShelfRows {
             previews.filter { it.channelId in rank }
                 .sortedWith(compareBy<RawProgram> { rank.getValue(it.channelId) }.thenByDescending { it.weight })
         val seen = HashSet<String>()
+        // A program may be published without a description where the same title, on another
+        // channel or in watch next, has one.
+        val described = (watchNext + previews).filter { !it.contentId.isNullOrBlank() && !it.description.isNullOrBlank() }
+            .associate { it.contentId!! to it.description!! }
         return ordered.asSequence()
-            .mapNotNull { item(it, channelTitles) }
+            .mapNotNull { item(it, channelTitles, described) }
             .filter { seen.add(it.intentUri) }
             // The limit is per channel: a long one must not crowd out the next.
             .groupBy { it.channel }.values.flatMap { it.take(LIMIT) }
@@ -73,10 +87,10 @@ object ShelfRows {
     fun tabs(items: List<ShelfItem>): List<ShelfTab> =
         items.groupBy { it.channel }.map { (channel, list) -> ShelfTab(channel, list.first().channelTitle, list) }
 
-    private fun item(p: RawProgram, channelTitles: Map<Long, String>): ShelfItem? {
+    private fun item(p: RawProgram, channelTitles: Map<Long, String>, described: Map<String, String>): ShelfItem? {
         val link = p.intentUri?.takeIf { it.isNotBlank() } ?: return null
         val title = p.title?.takeIf { it.isNotBlank() } ?: return null
-        val description = p.description?.trim()?.takeIf { it.isNotEmpty() }
+        val description = (p.description ?: p.contentId?.let(described::get))?.trim()?.takeIf { it.isNotEmpty() }
         val progress = if (p.durationMillis > 0 && p.positionMillis in 1..p.durationMillis) {
             p.positionMillis.toFloat() / p.durationMillis
         } else null
@@ -88,10 +102,16 @@ object ShelfRows {
             aspect = aspect(p.aspect),
             progress = progress,
             intentUri = link,
+            season = number(p.season),
+            episode = number(p.episodeNumber),
+            leftMillis = if (progress != null) p.durationMillis - p.positionMillis else null,
             channel = p.channelId,
             channelTitle = channelTitles[p.channelId],
         )
     }
+
+    /** A season or episode number as shown; blank and 0 mean the program has none. */
+    private fun number(value: String?): String? = value?.trim()?.takeIf { it.isNotEmpty() && it != "0" }
 
     /** TvContract.PreviewPrograms.ASPECT_RATIO_*; anything else reads as 16:9, the common case. */
     fun aspect(code: Int): Float = when (code) {

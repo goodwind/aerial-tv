@@ -70,6 +70,9 @@ import app.orchard.tv.shelf.ShelfItem
 import app.orchard.tv.shelf.ShelfRows
 import app.orchard.tv.shelf.ShelfTab
 import app.orchard.tv.R
+import app.orchard.tv.settings.AerialSettings
+import app.orchard.tv.settings.FocusStyle
+import app.orchard.tv.ui.components.focusRing
 import app.orchard.tv.ui.components.isSelect
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
@@ -82,6 +85,9 @@ data class ShelfContent(val pkg: String, val items: List<ShelfItem>) {
     /** The cards by channel; more than one means the shelf shows tabs. */
     val tabs: List<ShelfTab> = ShelfRows.tabs(items)
 }
+
+/** Room for the selected program's title, series line and description. */
+val ShelfSummaryH = 84.dp
 
 private const val FOCUSED_SCALE = 1.08f
 private val CardCorner = 10.dp
@@ -174,21 +180,32 @@ fun ShelfRow(
         Crossfade(
             targetState = items[index],
             animationSpec = tween(if (reduced) 0 else 200, easing = Motion.EaseOut),
-            modifier = Modifier.padding(start = margin).width(screenWidth * 0.55f).height(64.dp),
+            modifier = Modifier.padding(start = margin).width(screenWidth * 0.55f).height(ShelfSummaryH),
             label = "shelf-summary",
         ) { item ->
             val shadow = Shadow(Color.Black.copy(alpha = 0.45f), blurRadius = 10f)
+            val meta = shelfMeta(item)
             Column {
                 BasicText(
                     item.title,
                     style = Type.Title.copy(shadow = shadow),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                item.subtitle?.let {
+                // Where in a series, and how much is left of it.
+                meta?.let {
+                    BasicText(
+                        it,
+                        style = Type.Callout.copy(color = Color.White.copy(alpha = 0.92f), shadow = shadow),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+                // What it is about; failing that, the episode's title.
+                (item.description ?: item.subtitle)?.let {
                     BasicText(
                         it.replace(Regex("\\s+"), " "),
                         style = Type.Callout.copy(color = Color.White.copy(alpha = 0.78f), shadow = shadow),
-                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        maxLines = if (meta != null) 1 else 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
@@ -280,6 +297,10 @@ private fun ShelfCard(
     }
     val shown by animateFloatAsState(if (picture != null) 1f else 0f, tween(260, easing = Motion.EaseOut), label = "card-picture")
 
+    val ring by animateFloatAsState(
+        if (focused && AerialSettings.focusStyle == FocusStyle.HighContrast) 1f else 0f,
+        tween(140, easing = Motion.EaseOut), label = "card-ring",
+    )
     Box(
         modifier
             .size(width, height)
@@ -288,8 +309,10 @@ private fun ShelfCard(
                 scaleY = scale
                 shadowElevation = 24.dp.toPx() * lift
                 shape = RoundedCornerShape(CardCorner)
-                clip = true
-            },
+            }
+            // Before the clip, so the ring lies outside the card.
+            .focusRing(CardCorner, ring)
+            .clip(RoundedCornerShape(CardCorner)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             // Smoked glass until the picture arrives, so a card never shows the scene through it.
@@ -377,4 +400,23 @@ private fun ShelfTabs(tabs: List<ShelfTab>, selected: Int, focused: Boolean, mar
             }
         }
     }
+}
+
+
+/** "Season 1 · Episode 6 · 14 min left": where the owner is in a series, and what remains. */
+@Composable
+private fun shelfMeta(item: ShelfItem): String? {
+    val parts = listOfNotNull(
+        item.season?.let { stringResource(R.string.shelf_season, it) },
+        item.episode?.let { stringResource(R.string.shelf_episode, it) },
+        item.leftMillis?.let { left ->
+            val minutes = ((left + 59_999) / 60_000).toInt()
+            when {
+                minutes <= 0 -> null
+                minutes < 60 -> stringResource(R.string.shelf_left_min, minutes)
+                else -> stringResource(R.string.shelf_left_hm, minutes / 60, minutes % 60)
+            }
+        },
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }

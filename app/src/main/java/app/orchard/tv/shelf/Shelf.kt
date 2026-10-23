@@ -163,6 +163,7 @@ object Shelf {
         "package_name", "browsable", "title", "episode_title", "short_description",
         "poster_art_uri", "poster_art_aspect_ratio", "thumbnail_uri", "thumbnail_aspect_ratio",
         "intent_uri", "weight", "last_playback_position_millis", "duration_millis",
+        "content_id", "season_display_number", "episode_display_number", "long_description",
     )
 
     /** A whole program table; every column if a provider does not know one of those names. */
@@ -189,6 +190,10 @@ object Shelf {
         val engaged = col("last_engagement_time_utc_millis")
         val position = col("last_playback_position_millis")
         val duration = col("duration_millis")
+        val longDescription = col("long_description")
+        val contentIdCol = col("content_id")
+        val seasonCol = col("season_display_number")
+        val episodeCol = col("episode_display_number")
         val pkgCol = col("package_name")
         val browsable = col("browsable")
         fun str(i: Int) = if (i >= 0 && !c.isNull(i)) c.getString(i) else null
@@ -202,7 +207,7 @@ object Shelf {
                     str(pkgCol).orEmpty() to RawProgram(
                         title = str(title),
                         episodeTitle = str(episode),
-                        description = str(description),
+                        description = str(description) ?: str(longDescription),
                         posterUri = posterUri,
                         thumbnailUri = str(thumb),
                         // The aspect of the picture the card will show.
@@ -213,6 +218,9 @@ object Shelf {
                         lastEngagedMillis = long(engaged),
                         positionMillis = long(position),
                         durationMillis = long(duration),
+                        contentId = str(contentIdCol),
+                        season = str(seasonCol),
+                        episodeNumber = str(episodeCol),
                     ),
                 )
             }

@@ -18,7 +18,13 @@ class ShelfRowsTest {
         thumb: String? = null,
         episode: String? = null,
         description: String? = null,
-    ) = RawProgram(title, episode, description, poster, thumb, aspect, intent, channel, weight, engaged, position, duration)
+        contentId: String? = null,
+        season: String? = null,
+        episodeNo: String? = null,
+    ) = RawProgram(
+        title, episode, description, poster, thumb, aspect, intent, channel, weight, engaged, position, duration,
+        contentId = contentId, season = season, episodeNumber = episodeNo,
+    )
 
     @Test fun `watch next comes first, most recently engaged first`() {
         val items = ShelfRows.arrange(
@@ -141,5 +147,46 @@ class ShelfRowsTest {
             listOf(1, 2),
         )
         assertEquals(listOf(20, 5), ShelfRows.tabs(items).map { it.items.size })
+    }
+
+    @Test fun `season and episode come from the display numbers, blank or zero meaning none`() {
+        val items = ShelfRows.arrange(
+            listOf(
+                prog("ep", season = "1", episodeNo = "6", engaged = 3),
+                prog("movie", engaged = 2),
+                prog("zero", season = "0", episodeNo = " ", engaged = 1),
+            ),
+            emptyList(), emptyList(),
+        )
+        assertEquals("1", items[0].season)
+        assertEquals("6", items[0].episode)
+        assertNull(items[1].season)
+        assertNull(items[1].episode)
+        assertNull(items[2].season)
+        assertNull(items[2].episode)
+    }
+
+    @Test fun `time left is the duration less the position, only where there is progress`() {
+        val items = ShelfRows.arrange(
+            listOf(
+                prog("half", position = 600_000, duration = 3_600_000, engaged = 3),
+                prog("none", engaged = 2),
+                prog("broken", duration = 1, engaged = 1),
+            ),
+            emptyList(), emptyList(),
+        )
+        assertEquals(3_000_000L, items[0].leftMillis)
+        assertNull(items[1].leftMillis)
+        assertNull(items[2].leftMillis)
+    }
+
+    @Test fun `a program without a description borrows the one its content has elsewhere in the app`() {
+        val items = ShelfRows.arrange(
+            watchNext = listOf(prog("a", contentId = "7", description = "about a", engaged = 1)),
+            previews = listOf(prog("a again", contentId = "7", channel = 1, intent = "app://x"), prog("b", contentId = "8", channel = 1)),
+            channelOrder = listOf(1),
+        )
+        assertEquals("about a", items.first { it.title == "a again" }.description)
+        assertNull(items.first { it.title == "b" }.description)
     }
 }
