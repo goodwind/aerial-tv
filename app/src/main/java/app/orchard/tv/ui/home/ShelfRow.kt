@@ -122,6 +122,7 @@ fun ShelfRow(
     onSelect: (Int) -> Unit,
     onOpen: (ShelfItem, Rect?) -> Unit,
     onExit: () -> Unit,
+    onUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val reduced = LocalReducedMotion.current
@@ -226,8 +227,8 @@ fun ShelfRow(
                             { if (down) { if (inTabs) { if (tabIndex > 0) onTab(tabIndex - 1) } else if (index > 0) select(index - 1) }; true }
                         NativeKeyEvent.KEYCODE_DPAD_RIGHT ->
                             { if (down) { if (inTabs) { if (tabIndex < tabs.lastIndex) onTab(tabIndex + 1) } else if (index < items.lastIndex) select(index + 1) }; true }
-                        // Up reaches the tabs, if there are any; Control Center is the other way round, to the right of the top row.
-                        NativeKeyEvent.KEYCODE_DPAD_UP -> { if (down && tabs.size > 1) inTabs = true; true }
+                        // Up reaches the tabs, if there are any; from the top of the shelf it goes on to Control Center.
+                        NativeKeyEvent.KEYCODE_DPAD_UP -> { if (down) { if (tabs.size > 1 && !inTabs) inTabs = true else onUp() }; true }
                         NativeKeyEvent.KEYCODE_DPAD_DOWN -> { if (down) { if (inTabs) inTabs = false else onExit() }; true }
                         else -> if (e.isSelect()) {
                             // On release, and only for a press that began here (see Pressable).

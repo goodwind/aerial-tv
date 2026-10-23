@@ -204,6 +204,11 @@ fun HomeScreen(
     var focusAfterOverlay by remember { mutableStateOf<String?>(null) }
     var indexAfterOverlay by remember { mutableStateOf(0) }
     var pillFocused by remember { mutableStateOf(false) }
+    // Where focus came from on its way to the status pill, the way to Control Center: up from a
+    // shelf, or up (or right, from the end of the top row) from an app. Down, Back and a closed
+    // Control Center all go back there.
+    var leavingShelf by remember { mutableStateOf(false) }
+    var pillFromShelf by remember { mutableStateOf(false) }
     var lastFocusedIndex by remember { mutableStateOf(0) }
     // Focus is up on the shelf; focusedKey still names the app it belongs to.
     var inShelf by remember { mutableStateOf(false) }
@@ -291,7 +296,14 @@ fun HomeScreen(
         if (AerialSettings.appContent) apps.take(COLUMNS).forEach { if (it.source == null && it.folder == null) Shelf.load(it.packageName) }
     }
     // The shelf is shown only while focus is up on it; on its app's tile an arrow says it is there.
-    val shelfUp = shelf != null && inShelf
+    // The shelf stays up, unfocused, while focus is on the pill it was left for.
+    val shelfUp = shelf != null && (inShelf || pillFocused && pillFromShelf)
+    // Back to where focus left for the pill: the shelf, or the app's tile.
+    fun returnFromPill() {
+        val key = focusedKey ?: return
+        val onShelf = pillFromShelf && shelf?.pkg == apps.firstOrNull { it.key == key }?.packageName
+        runCatching { if (onShelf) shelfRequester.requestFocus() else requester(key).requestFocus() }
+    }
     val shelfIndex = shelf?.let { shelfIndexes[shelfKey(it.pkg)] } ?: 0
     val shelfProgress by animateFloatAsState(
         if (shelfUp) 1f else 0f,
@@ -307,7 +319,7 @@ fun HomeScreen(
         }
     }
     // The backdrop follows the selected card, after the same kind of settle.
-    val shelfImage = shelf?.takeIf { inShelf }?.let { c ->
+    val shelfImage = shelf?.takeIf { shelfUp }?.let { c ->
         val items = c.tabs[(shelfTabs[c.pkg] ?: 0).coerceIn(0, c.tabs.lastIndex)].items
         items.getOrNull(shelfIndex)?.image ?: items.firstNotNullOfOrNull { it.image }
     }
@@ -340,7 +352,7 @@ fun HomeScreen(
         val index = apps.indexOfFirst { it.key == focusedKey }
         // A tile that went while the overlay was up (hidden, put in a folder, a folder ungrouped)
         // leaves focus where it was.
-        if (pillFocused && focusedKey != null) runCatching { pillRequester.requestFocus() }
+        if (pillFocused && focusedKey != null) returnFromPill()
         else focusApp(if (index >= 0) index else if (wanted != null) indexAfterOverlay else lastFocusedIndex)
     }
     // A folder whose last app left closes.
@@ -378,6 +390,11 @@ fun HomeScreen(
         // screensaver. A grid scrolled by touch counts as being inside it.
         if (inShelf) {
             focusedKey?.let { runCatching { requester(it).requestFocus() } }
+            return@BackHandler
+        }
+        // From the status pill, back to where it was reached from.
+        if (pillFocused && focusedKey != null) {
+            returnFromPill()
             return@BackHandler
         }
         val scrolled = dragged && scroll.value > 1f
@@ -594,13 +611,14 @@ fun HomeScreen(
                                 margin = metrics.margin,
                                 screenWidth = screenW,
                                 cardHeight = metrics.shelfCardH,
-                                onFocusChange = { focused -> if (pkg == shelf?.pkg) inShelf = focused },
+                                onFocusChange = { focused -> if (pkg == shelf?.pkg) { inShelf = focused; if (focused) pillFocused = false } },
                                 onTab = { shelfTabs[pkg] = it },
                                 onSelect = { shelfIndexes[shelfKey(pkg)] = it },
                                 onOpen = { item, bounds ->
                                     apps.firstOrNull { it.packageName == pkg }?.let { onOpenShelfItem(it, item, bounds) }
                                 },
                                 onExit = { focusedKey?.let { runCatching { requester(it).requestFocus() } } },
+                                onUp = { leavingShelf = true; runCatching { pillRequester.requestFocus() } },
                             )
                         }
                     }
@@ -762,7 +780,14 @@ fun HomeScreen(
                 showTime = if (dragged) pastShelf else focusedRow > 0,
                 enabled = gridEnabled && moving == null,
                 focusRequester = pillRequester,
-                modifier = Modifier.graphicsLayer { alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .graphicsLayer { alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f) }
+                    .focusProperties {
+                        // Down goes back to where the pill was reached from, not to whatever tile lies under it.
+                        val key = focusedKey
+                        val shelfApp = apps.firstOrNull { it.key == key }?.packageName
+                        if (key != null) down = if (pillFromShelf && shelf?.pkg == shelfApp) shelfRequester else requester(key)
+                    },
                 onFocused = { gained ->
                     // The window hands its first focus to the top-most control; the top row is where Home starts.
                     if (gained) {
@@ -770,6 +795,8 @@ fun HomeScreen(
                             if (apps.isNotEmpty()) focusApp(0)
                         } else {
                             pillFocused = true
+                            pillFromShelf = leavingShelf
+                            leavingShelf = false
                         }
                     }
                 },
