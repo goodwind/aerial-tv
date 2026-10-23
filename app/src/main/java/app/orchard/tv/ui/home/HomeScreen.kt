@@ -299,8 +299,9 @@ fun HomeScreen(
         when {
             reduced -> toSaver.snapTo(if (carrying) 1f else 0f)
             carrying -> toSaver.animateTo(1f, tween(2000, easing = Motion.EaseInOut))
-            // A key woke it: Home comes straight back.
-            else -> toSaver.animateTo(0f, tween(380, easing = Motion.EaseOut))
+            // A key woke it: Home comes back at once and settles in, the way it went. At 380 ms the
+            // apps' part of it (60% of the way) was over in a blink and read as a cut (issue #357).
+            else -> toSaver.animateTo(0f, tween(650, easing = Motion.EaseOut))
         }
     }
     // ---- The shelf: the focused top-row app's own programs (shelf/Shelf.kt) ----
@@ -523,9 +524,15 @@ fun HomeScreen(
 
         // The folder open, or under its app's menu.
         val openFolder = (overlay as? Overlay.Folder)?.id ?: (overlay as? Overlay.AppMenu)?.inFolder
+        val panelOpen = overlay is Overlay.ControlCenter || overlay is Overlay.HiddenApps || openFolder != null
+        val liveBlur = AerialSettings.liveBlur && Build.VERSION.SDK_INT >= 31
         val backdropBlur by animateDpAsState(
-            if (overlay is Overlay.ControlCenter || overlay is Overlay.HiddenApps || openFolder != null) 30.dp else 0.dp,
+            if (panelOpen && liveBlur) 30.dp else 0.dp,
             tween(320, easing = Motion.EaseOut), label = "backdrop-blur",
+        )
+        val backdropFrost by animateFloatAsState(
+            if (panelOpen && !liveBlur) 1f else 0f,
+            tween(320, easing = Motion.EaseOut), label = "backdrop-frost",
         )
 
         val ambientApp = apps.getOrNull(focusedIndex) ?: apps.firstOrNull()
@@ -550,15 +557,18 @@ fun HomeScreen(
                 .graphicsLayer {
                     val r = backdropBlur.toPx()
                     renderEffect = if (r > 0.5f && Build.VERSION.SDK_INT >= 31) BlurEffect(r, r, TileMode.Clamp) else null
+                    // Under the frost once it is whole, Home is not drawn at all: on MFTR0 the
+                    // picture, plate and tiles cost the GPU as much again as the panel over them.
+                    alpha = if (backdropFrost > 0.999f) 0f else 1f
                 },
         ) {
-            // The glass plate under the top row, as wide as the apps in it (tvOS 26).
-            val topCount = apps.size.coerceAtMost(COLUMNS)
-            val plate = if (topCount == 0 || !AerialSettings.homePlate) null else with(density) {
+            // The glass plate under the top row (tvOS 26), the row's full width however few apps
+            // there are, which sit at its left: sized to three apps it read as a stray panel (#284).
+            val plate = if (apps.isEmpty() || !AerialSettings.homePlate) null else with(density) {
                 Rect(
                     (metrics.margin - PlatePadH).toPx(),
                     (metrics.topRowY - PlatePadV).toPx(),
-                    (metrics.margin + metrics.pitchX * (topCount - 1) + metrics.tileW + PlatePadH).toPx(),
+                    (metrics.margin + metrics.pitchX * (COLUMNS - 1) + metrics.tileW + PlatePadH).toPx(),
                     (metrics.topRowY + metrics.tileH + PlatePadV + metrics.firstGap).toPx(),
                 )
             }
@@ -823,6 +833,8 @@ fun HomeScreen(
             }
         }
 
+        PanelBackdrop(Wallpapers.frosted.takeIf { Wallpapers.backdrop != null }) { backdropFrost }
+
         // Rows that scroll up under the status pill fade out instead of colliding with it.
         Canvas(
             Modifier
@@ -863,7 +875,11 @@ fun HomeScreen(
                 enabled = gridEnabled && moving == null,
                 focusRequester = pillRequester,
                 modifier = Modifier
-                    .graphicsLayer { alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f) }
+                    .graphicsLayer {
+                        alpha = 1f - (toSaver.value * 2f).coerceIn(0f, 1f)
+                        // No offscreen buffer: it would cut the focused pill's 8% growth to a box.
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
+                    }
                     .focusProperties {
                         // Down goes back to where the pill was reached from, not to whatever tile lies under it.
                         val key = focusedKey
