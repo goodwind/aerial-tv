@@ -63,6 +63,7 @@ import app.orchard.tv.system.Diagnostics
 import app.orchard.tv.system.MissingClipboard
 import app.orchard.tv.system.Sounds
 import app.orchard.tv.system.SystemProbe
+import app.orchard.tv.system.LaunchFallback
 import app.orchard.tv.system.settingsLaunchIntent
 import app.orchard.tv.update.Updates
 import app.orchard.tv.weather.Weather
@@ -368,6 +369,13 @@ class MainActivity : ComponentActivity() {
     }
     private val releaseScreen = Runnable { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     private var swallowKeyUp = -1
+
+    /**
+     * Until when every key only finishes waking the screensaver. An IR remote can send one press as
+     * two (TCL MT5879: a Down that woke it, then another that moved focus into the grid); Xiaomi's
+     * Bluetooth remote never did.
+     */
+    private var wakeQuietUntil = 0L
     private var swallowTouch = false
 
     /** An app (or the stock launcher) was opened from the grid and Home has not been pressed since. */
@@ -376,7 +384,7 @@ class MainActivity : ComponentActivity() {
     private fun restartIdleTimer() {
         vm.lastInputAt = SystemClock.uptimeMillis()
         idleHandler.removeCallbacks(showScreensaver)
-        idleHandler.postDelayed(showScreensaver, idleBeforeScreensaver())
+        if (AerialSettings.screensaverMinutes != AerialSettings.NEVER) idleHandler.postDelayed(showScreensaver, idleBeforeScreensaver())
     }
 
     /**
@@ -409,10 +417,16 @@ class MainActivity : ComponentActivity() {
             // The key that wakes the screen only wakes it; it does not also move focus or open an app.
             hideScreensaver()
             swallowKeyUp = event.keyCode
+            wakeQuietUntil = SystemClock.uptimeMillis() + WAKE_QUIET_MS
             return true
         }
-        if (event.action == KeyEvent.ACTION_UP && event.keyCode == swallowKeyUp) {
-            swallowKeyUp = -1
+        // The waking key, repeats included, through to its lift; and anything else just after.
+        if (event.keyCode == swallowKeyUp) {
+            if (event.action == KeyEvent.ACTION_UP) swallowKeyUp = -1
+            return true
+        }
+        if (event.eventTime < maxOf(wakeQuietUntil, dreamWokeAt + WAKE_QUIET_MS)) {
+            DiagLog.i("key ${KeyEvent.keyCodeToString(event.keyCode)} right after waking, ignored")
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -506,6 +520,10 @@ class MainActivity : ComponentActivity() {
         // Back in front by any route (Home was handled in onNewIntent, which runs first; Back from
         // the app lands here directly), so the next Home press is a Home-on-Home again.
         openedAppSinceHome = false
+        LaunchFallback.next()?.let {
+            DiagLog.i("the page just opened closed at once; opening ${it.component ?: it.action}")
+            open(it)
+        }
     }
 
     override fun onPause() {
@@ -585,6 +603,7 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(settingsLaunchIntent(this, intent))
         } catch (e: Exception) {
+            LaunchFallback.next()?.let { return open(it) }
             Toast.makeText(this, R.string.unavailable, Toast.LENGTH_SHORT).show()
         }
     }
@@ -607,5 +626,14 @@ class MainActivity : ComponentActivity() {
         /** Set by Home Guard when it brings Aerial back after standby or a boot. */
         const val EXTRA_WOKE = "app.orchard.tv.WOKE"
 
+        /** How long after the key that woke a screensaver other keys are still taken as waking it. */
+        const val WAKE_QUIET_MS = 400L
+
+        /**
+         * When the system's screensaver (AerialDream) last ended on a key, in uptime: a second press
+         * the remote sent with it reaches Home, which takes it as waking too.
+         */
+        @Volatile
+        var dreamWokeAt = 0L
     }
 }

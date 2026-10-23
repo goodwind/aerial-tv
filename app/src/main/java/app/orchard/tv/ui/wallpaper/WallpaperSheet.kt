@@ -291,7 +291,11 @@ fun WallpaperSheet(
                     Group { note ->
                         SettingRow(
                             R.string.ss_kind,
-                            if (AerialSettings.backStartsScreensaver) stringResource(R.string.ss_back_hint) else null,
+                            when {
+                                Wallpapers.screensaverFollows -> stringResource(R.string.ss_follow_hint)
+                                AerialSettings.backStartsScreensaver -> stringResource(R.string.ss_back_hint)
+                                else -> null
+                            },
                             note, first = true,
                         ) { ScreensaverChoice(onStartScreensaver) }
                         // Only the qualities this TV can play; a 1080p-only TV has nothing to choose.
@@ -307,7 +311,9 @@ fun WallpaperSheet(
                         }
                         Choices(
                             R.string.ss_delay, null, note,
-                            AerialSettings.screensaverChoices.map { it to stringResource(R.string.ss_minutes, it) },
+                            AerialSettings.screensaverChoices.map {
+                                it to if (it == AerialSettings.NEVER) stringResource(R.string.ss_never) else stringResource(R.string.ss_minutes, it)
+                            },
                             AerialSettings.screensaverMinutes, AerialSettings::chooseScreensaverMinutes,
                         )
                         Choices(

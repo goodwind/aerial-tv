@@ -119,6 +119,7 @@
     <string name="wp_mix_theme_sea">海</string>
     <string name="wp_mix_note">按下面选的来源轮流换壁纸，间隔也在下面设。长按下方图片的确认键可以保存或隐藏。</string>
     <string name="wp_screensaver">屏幕保护程序</string>
+    <string name="ss_follow_hint">还没选过，跟随壁纸：航拍壁纸配航拍，其他壁纸配照片，并从这张壁纸开始。选一个就固定下来。</string>
     <string name="ss_aerial">航拍</string>
     <string name="ss_photos">照片</string>
     <string name="ss_clock">时钟</string>
@@ -128,6 +129,7 @@
     <string name="ss_start">立即开始</string>
     <string name="ss_delay">开始时间</string>
     <string name="ss_minutes">%d 分钟</string>
+    <string name="ss_never">从不</string>
     <string name="ss_back_hint">提示：在主页第一行按返回键，也可以立即开始屏保。</string>
     <string name="ss_back">返回键</string>
     <string name="ss_back_on">开始屏保</string>

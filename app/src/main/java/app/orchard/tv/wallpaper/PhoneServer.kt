@@ -129,6 +129,7 @@ class PhoneServer private constructor(private val context: Context, private val 
             .put("screensaver", Wallpapers.screensaver.key)
             // Whether there is a key, never the key.
             .put("unsplash", AerialSettings.unsplashKey.isNotBlank())
+            .put("screensaverFollows", Wallpapers.screensaverFollows)
             .put("focusStyle", AerialSettings.focusStyle.key)
             .put("wallpapers", list)
             .put("apps", JSONArray().apply {
