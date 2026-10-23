@@ -86,11 +86,11 @@
     <string name="wx_rain">Rain</string>
     <string name="wx_snow">Snow</string>
     <string name="wx_thunder">Thunderstorm</string>
-    <string name="wp_daily">Daily Photos</string>
-    <string name="wp_daily_latest">Always Today\'s</string>
-    <string name="wp_builtin">Built-in</string>
-    <string name="wp_live">Aerial · plays after 10 seconds on Home</string>
-    <string name="wp_photos">My Photos</string>
+    <string name="wp_daily_latest">Daily Photo</string>
+    <string name="wp_live">Moving aerial films. They start after 10 seconds still on the top row of Home and stop on the frame showing at any key, which stays as the picture; the next film picks up from there.</string>
+    <string name="wp_daily_note">Bing\'s photo of the day, changing to the new one every day.</string>
+    <string name="wp_photo_note">Your photo. Scan the code on the right to send more from your phone.</string>
+    <string name="wp_auto_note">Light taken from the selected app\'s artwork.</string>
     <string name="wp_mix_row">Changes by itself</string>
     <string name="wp_mix">Auto Wallpapers</string>
     <string name="wp_mix_sources">Sources</string>
@@ -118,6 +118,7 @@
     <string name="wp_mix_theme_mountains">Mountains</string>
     <string name="wp_mix_theme_space">Space</string>
     <string name="wp_mix_theme_sea">Sea</string>
+    <string name="wp_mix_note">Takes turns through the sources chosen below, at the interval you set. Hold OK on a picture below to keep or hide it.</string>
     <string name="wp_screensaver">Screensaver</string>
     <string name="ss_aerial">Aerial</string>
     <string name="ss_photos">Photos</string>
@@ -153,7 +154,7 @@
     <string name="st_names">App Names</string>
     <string name="st_names_focused">Selected App</string>
     <string name="st_names_all">All Apps</string>
-    <string name="st_names_hint">Names under every app, or only under the selected one, as on Apple TV.</string>
+    <string name="st_names_hint">Names under every app, or only under the selected one, as on Apple TV. With every name shown, the top row\'s names sit on its glass plate too.</string>
     <string name="ss_kind">Style</string>
     <string name="wp_weather_city">Location</string>
     <string name="st_home_standard">Two Rows</string>
@@ -182,7 +183,7 @@
     <string name="cc_inputs_pin">Show on Home (any number)</string>
     <string name="cc_inputs_boot">When the TV Turns On (one)</string>
     <string name="cc_inputs_boot_none">Nothing, stay on Aerial</string>
-    <string name="cc_inputs_boot_hint">Switch to this input when the TV is turned on or wakes from standby. Home still comes back to Aerial.</string>
+    <string name="cc_inputs_boot_hint">Switch to this input when the TV is turned on or wakes from standby. Home still comes back to Aerial. To start on an app instead, a live TV app say, press and hold it on Home and choose Open When TV Turns On.</string>
     <string name="cc_inputs_pin_hint">Pinned inputs appear as tiles at the front of Home; select one to switch straight to it. Long-press a tile to move or remove it.</string>
     <string name="menu_unpin_source">Remove from Home</string>
     <string name="menu_source_device">Connected Device</string>
@@ -228,4 +229,14 @@
     <string name="weather_snow">Snow</string>
     <string name="weather_thunder">Thunderstorms</string>
     <string name="weather_high_low">H:%1$d°  L:%2$d°</string>
+    <string name="st_peek">Second Row</string>
+    <string name="st_peek_show">Peek</string>
+    <string name="st_peek_hide">Hidden</string>
+    <string name="st_peek_hint">With one row, the top of the second row peeks out under the first, to show there is more below. Hidden keeps it out of sight until you press down.</string>
+    <string name="menu_boot_on">Open When TV Turns On</string>
+    <string name="menu_boot_off">Don\'t Open When TV Turns On</string>
+    <string name="cc_boot">When TV Turns On</string>
+    <string name="notice_boot_on">%1$s will open when the TV turns on</string>
+    <string name="notice_boot_switch">%1$s will open when the TV turns on, instead of %2$s</string>
+    <string name="notice_boot_off">%1$s will no longer open when the TV turns on</string>
 </resources>

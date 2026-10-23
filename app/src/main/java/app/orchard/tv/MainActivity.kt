@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.drawable.BitmapDrawable
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkRequest
@@ -19,6 +20,7 @@ import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.provider.Settings
 import android.widget.Toast
@@ -29,6 +31,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
@@ -73,6 +76,14 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) = vm.refreshSystem()
     }
 
+    /** Midnight, or the clock set at boot: a new daily photo, and the next of the rotating ones. */
+    private val dayReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            Wallpapers.refreshDailyIfStale()
+            Wallpapers.rotateIfDue()
+        }
+    }
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = runOnUiThread {
             vm.refreshNetwork()
@@ -109,8 +120,21 @@ class MainActivity : ComponentActivity() {
         val reducedMotion = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
         // The home screen paints every pixel itself; a window background would be one more
-        // full-screen fill per frame for the TV's GPU.
-        window.setBackgroundDrawable(null)
+        // full-screen fill per frame for the TV's GPU. Only until Home's first frame, the backdrop
+        // baked at the last start, so the window never shows black while Compose sets up.
+        val baked = Wallpapers.backdrop
+        window.setBackgroundDrawable(baked?.let { BitmapDrawable(resources, it.asAndroidBitmap()) })
+        if (baked != null) {
+            window.decorView.viewTreeObserver.addOnDrawListener(object : ViewTreeObserver.OnDrawListener {
+                override fun onDraw() {
+                    // Not from inside the draw itself.
+                    idleHandler.post {
+                        window.setBackgroundDrawable(null)
+                        window.decorView.viewTreeObserver.removeOnDrawListener(this)
+                    }
+                }
+            })
+        }
         if (DiagLog.modeSwitch(this)) preferSmoothestRefreshRate() else DiagLog.i("refresh rate left as it is (mode_switch off)")
         if (DiagLog.softLayer(this)) window.decorView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         logWindow()
@@ -174,24 +198,29 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Opens the input the owner wants the TV to start on, if any. The list of inputs loads with
-     * the apps, so wait for it a moment. Several routes may fire for one wake; the first wins.
+     * Opens the input or app the owner wants the TV to start on, if any. Both list with the apps,
+     * so wait for them a moment. Several routes may fire for one wake; the first wins.
      */
     private fun openBootSource(reason: String) {
-        val id = AerialSettings.bootSource ?: return
+        val id = AerialSettings.bootSource
+        val pkg = AerialSettings.bootApp
+        if (id == null && pkg == null) return
         if (SystemClock.elapsedRealtime() - bootSourceOpenedAt < 15_000) return
         bootSourceOpenedAt = SystemClock.elapsedRealtime()
         lifecycleScope.launch {
             // Inputs can take a while to list right after a wake (Xiaomi MiTV-MTEQ0, issue #111).
-            val source = withTimeoutOrNull(30_000) {
-                snapshotFlow { vm.sources.firstOrNull { it.id == id } }.filterNotNull().first()
+            val intent = withTimeoutOrNull(30_000) {
+                snapshotFlow {
+                    if (id != null) vm.sources.firstOrNull { it.id == id }?.let { it.label to it.intent }
+                    else vm.entry(pkg!!)?.let { it.label to it.launchIntent() }
+                }.filterNotNull().first()
             } ?: run {
-                android.util.Log.w("Aerial", "$reason: input $id not listed; not opening it")
+                android.util.Log.w("Aerial", "$reason: ${id ?: pkg} not listed; not opening it")
                 return@launch
             }
-            android.util.Log.i("Aerial", "$reason: opening ${source.label}, the input the TV starts on")
+            android.util.Log.i("Aerial", "$reason: opening ${intent.first}, what the TV starts on")
             openedAppSinceHome = true
-            open(source.intent)
+            open(intent.second)
         }
     }
 
@@ -394,6 +423,15 @@ class MainActivity : ComponentActivity() {
             IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
             ContextCompat.RECEIVER_EXPORTED,
         )
+        ContextCompat.registerReceiver(
+            this, dayReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_DATE_CHANGED)
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         getSystemService<ConnectivityManager>()?.let { cm ->
             if (Build.VERSION.SDK_INT >= 24) cm.registerDefaultNetworkCallback(networkCallback)
             else cm.registerNetworkCallback(NetworkRequest.Builder().build(), networkCallback)
@@ -437,6 +475,7 @@ class MainActivity : ComponentActivity() {
         DiagLog.i("onStop")
         unregisterReceiver(packageReceiver)
         unregisterReceiver(volumeReceiver)
+        unregisterReceiver(dayReceiver)
         runCatching { getSystemService<ConnectivityManager>()?.unregisterNetworkCallback(networkCallback) }
     }
 

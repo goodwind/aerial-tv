@@ -37,7 +37,8 @@ data class AppEntry(
 
 /**
  * A Home tile for a TV input. Its key never collides with a package name. A device or name chosen
- * for the input titles the tile, with the port underneath; a picture from the phone page covers it.
+ * for the input titles its caption; a device gives the tile its mark alone, a typed name titles the
+ * tile with the port underneath. A picture from the phone page covers it.
  */
 fun sourceEntry(context: Context, source: TvSource): AppEntry {
     val key = SOURCE_KEY_PREFIX + source.id
@@ -47,11 +48,12 @@ fun sourceEntry(context: Context, source: TvSource): AppEntry {
     val made = SourceArt(look, source.label, source.deviceName, CustomIcons.stamp(key), TileArtFactory.W)
     val art = synchronized(sourceArt) { sourceArt[key]?.takeIf { it.first == made }?.second } ?: run {
         val custom = CustomIcons.load(key)
-        when {
-            custom != null -> TileArtFactory.fromBanner(android.graphics.drawable.BitmapDrawable(android.content.res.Resources.getSystem(), custom))
-            name != null -> TileArtFactory.forSource(source.kind, name, source.label, look?.device)
-            else -> TileArtFactory.forSource(source.kind, source.label, source.deviceName)
-        }.also { synchronized(sourceArt) { sourceArt[key] = made to it } }
+        (if (custom != null) TileArtFactory.fromBanner(android.graphics.drawable.BitmapDrawable(android.content.res.Resources.getSystem(), custom))
+        // A chosen device's mark goes on alone, its name on the caption; a typed name still shows.
+        else if (look?.device != null && look.name == null) TileArtFactory.forSource(source.kind, null, null, look.device)
+        else if (name != null) TileArtFactory.forSource(source.kind, name, source.label, look?.device)
+        else TileArtFactory.forSource(source.kind, source.label, source.deviceName))
+            .also { synchronized(sourceArt) { sourceArt[key] = made to it } }
     }
     return AppEntry(
         packageName = key,
@@ -146,6 +148,7 @@ object AppCatalog {
      * One tile per package; the TV entry wins.
      */
     suspend fun load(context: Context): List<AppEntry> = withContext(Dispatchers.Default) {
+        TileDiskCache.init(context)
         val pm = context.packageManager
         val found = LinkedHashMap<String, Pair<ActivityInfo, Boolean>>()
         pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0)
@@ -172,7 +175,10 @@ object AppCatalog {
             found.values.map { (info, leanback) ->
                 async { runCatching { entry(pm, info, leanback, byCategory) }.getOrNull() }
             }.awaitAll().filterNotNull()
-        }.also { loaded = it }
+        }.also {
+            loaded = it
+            TileDiskCache.keepOnly(it.mapTo(HashSet()) { app -> app.packageName })
+        }
     }
 
     /**
@@ -214,6 +220,9 @@ object AppCatalog {
         // A picture chosen on the phone page changes the tile as much as an update does.
         val stamp = runCatching { pm.getPackageInfo(pkg, 0).lastUpdateTime }.getOrDefault(0L) + CustomIcons.stamp(pkg)
         val cached = synchronized(cache) { cache[pkg] }?.takeIf { it.stamp == stamp && it.width == TileArtFactory.W }
+            ?: TileDiskCache.read(pkg, TileDiskCache.key(stamp))?.let { (label, art) ->
+                Cached(stamp, TileArtFactory.W, label, art).also { synchronized(cache) { cache[pkg] = it } }
+            }
         val system = (info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
         val label: String
         val art: TileArt
@@ -239,6 +248,7 @@ object AppCatalog {
                 else -> TileArtFactory.fromIcon(densest(pm, info, info.iconResource) ?: info.loadIcon(pm), recipe)
             }
             synchronized(cache) { cache[pkg] = Cached(stamp, TileArtFactory.W, label, art) }
+            TileDiskCache.write(pkg, TileDiskCache.key(stamp), label, art)
         }
         val removable = !system
         return AppEntry(pkg, label, ComponentName(pkg, info.name), leanback, removable, art)

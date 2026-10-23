@@ -11,6 +11,7 @@ import android.media.tv.TvInputManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
@@ -36,7 +37,7 @@ data class VolumeStatus(val level: Int = 0, val max: Int = 100, val muted: Boole
     val fraction: Float get() = if (max == 0) 0f else level / max.toFloat()
 }
 
-enum class SourceKind { Hdmi, DisplayPort, Tuner, Av, Other }
+enum class SourceKind { Hdmi, DisplayPort, Tuner, Av, Usb, Other }
 
 data class TvSource(
     val id: String,
@@ -93,19 +94,33 @@ object SystemProbe {
     private fun volumeFlags(context: Context) =
         if (isInstalled(context, "com.tcl.settings")) AudioManager.FLAG_SHOW_UI else 0
 
+    /**
+     * TCL tcl_m7642 (雷鸟 65S515D, Android 9) has adjustStreamVolume note the change in battery stats,
+     * which needs a system permission: it threw and Control Center crashed at the first step (issue
+     * #15). Setting the level is the way left there.
+     */
     fun adjustVolume(context: Context, direction: Int) {
         val am = context.getSystemService<AudioManager>() ?: return
-        am.adjustStreamVolume(
-            AudioManager.STREAM_MUSIC,
-            if (direction > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
-            volumeFlags(context),
-        )
+        val flags = volumeFlags(context)
+        try {
+            am.adjustStreamVolume(
+                AudioManager.STREAM_MUSIC,
+                if (direction > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
+                flags,
+            )
+        } catch (e: SecurityException) {
+            runCatching {
+                val level = am.getStreamVolume(AudioManager.STREAM_MUSIC) + if (direction > 0) 1 else -1
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, level.coerceIn(0, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)), flags)
+            }
+        }
     }
 
     fun toggleMute(context: Context) {
         val am = context.getSystemService<AudioManager>() ?: return
         if (Build.VERSION.SDK_INT >= 23) {
-            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, volumeFlags(context))
+            // See adjustVolume: no other way to mute there.
+            runCatching { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, volumeFlags(context)) }
         } else {
             legacyMuted = !legacyMuted
             @Suppress("DEPRECATION")
@@ -132,7 +147,7 @@ object SystemProbe {
         pkg in SETTINGS_PACKAGES ||
             context.packageManager.resolveActivity(Intent(Settings.ACTION_SETTINGS), 0)?.activityInfo?.packageName == pkg
 
-    private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.android.tv.settings", "com.xiaomi.mitv.settings", "com.tcl.settings")
+    private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.android.tv.settings", "com.xiaomi.mitv.settings", "com.tcl.settings", "com.helios.setting")
 
     fun settingsIntent(context: Context): Intent =
         firstResolvable(
@@ -141,6 +156,11 @@ object SystemProbe {
             Intent(Settings.ACTION_SETTINGS),
             // TCL MT5879 (China): nothing answers ACTION_SETTINGS; MAIN opens TCL's full settings panel.
             Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.tcl.settings", "com.tcl.settings.ui.MainActivity")),
+            // PPTV K55U27 (MStar, Android 6): its settings app answers no standard action (issue #264).
+            Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.pptv.setting", "com.pptv.setting.root.SettingsActivity")),
+            // XGIMI GMUI (Z7X, Android 9) neither; its settings open by link (issue #241).
+            Intent(Intent.ACTION_VIEW, Uri.parse("Settings://com.xgimi.misckey.main/mainPage")),
+            WHALEY_SETTINGS,
         )
 
     // TCL MT5879 answers ACTION_WIFI_SETTINGS with its Wi-Fi side panel.
@@ -167,8 +187,21 @@ object SystemProbe {
             context,
             Intent("com.xiaomi.mitv.settings.WIFI_SETTINGS").setComponent(ComponentName("com.xiaomi.mitv.settings", "com.xiaomi.mitv.settings.wifi.MitvWifiActivity")),
             Intent(Settings.ACTION_WIFI_SETTINGS),
+            // PPTV K55U27 and XGIMI Z7X answer no standard Wi-Fi action (issues #264, #241).
+            Intent("com.pptv.intent.action.WIFI_ACTIVITY").setComponent(ComponentName("com.pptv.setting", "com.pptv.setting.wifi.WifiWorkActivity")),
+            Intent(Intent.ACTION_VIEW, Uri.parse("Settings://com.xgimi.settings.net/wifi_misckey")),
             Intent(Settings.ACTION_SETTINGS),
+            // TCL tcl_m7642 (Android 9) answers neither Wi-Fi nor settings actions (issue #15).
+            Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.tcl.settings", "com.tcl.settings.ui.MainActivity")),
+            WHALEY_SETTINGS,
         )
+
+    /**
+     * Whaley (WTV55K1J, Android 5.0) answers no settings action; its network page is not exported,
+     * so the network button opens its settings too (issue #292).
+     */
+    private val WHALEY_SETTINGS
+        get() = Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.helios.setting", "com.helios.activity.StartActivity"))
 
     /**
      * Opens the TV's own picture settings where brightness lives, for TVs whose backlight Aerial
@@ -191,7 +224,16 @@ object SystemProbe {
             if (shown) return true
         }
         return runCatching {
-            context.startActivity(firstResolvable(context, Intent(Settings.ACTION_DISPLAY_SETTINGS), Intent(Settings.ACTION_SETTINGS)))
+            context.startActivity(
+                firstResolvable(
+                    context,
+                    Intent(Settings.ACTION_DISPLAY_SETTINGS),
+                    // PPTV K55U27: picture and sound, where its brightness is (issue #264).
+                    Intent("com.pptv.intent.action.PICTUREAUDIO_ACTIVITY")
+                        .setComponent(ComponentName("com.pptv.setting", "com.pptv.setting.media.PictureAudioSettingActivity")),
+                    settingsIntent(context),
+                ),
+            )
         }.isSuccess
     }
 
@@ -203,6 +245,16 @@ object SystemProbe {
      */
     fun openInputPicker(context: Context): Boolean {
         val pm = context.packageManager
+        // Hisense VIDAA_TV (MT9653, Android 11) lists no inputs either; its input panel is a
+        // foreground service (issue #261, tried on the reporter's TV).
+        val hisense = Intent("com.hisense.tv.start_inputs")
+            .setComponent(ComponentName("com.hisense.tv.inputs", "com.hisense.tv.InputsUIService"))
+        if (pm.resolveService(hisense, 0) != null) {
+            val shown = runCatching {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(hisense) else context.startService(hisense)
+            }.getOrNull() != null
+            if (shown) return true
+        }
         val intent = if (pm.hasSystemFeature("com.tcl.software.systemui_custom_tv_source")) {
             Intent("com.tcl.tvstatusbar.action.SHOW_WINDOW").setPackage("com.android.systemui")
                 .putExtra("TvStatusBar_Type", "Source")
@@ -237,6 +289,33 @@ object SystemProbe {
     fun sources(context: Context): List<TvSource> = frameworkSources(context)
         .ifEmpty { KonkaSources.load(context) }
         .ifEmpty { tclSources(context) }
+        .ifEmpty { whaleySources(context) } + listOfNotNull(usbSource(context))
+
+    /**
+     * The TV's own player for USB drives, offered as one more input: owners switch the TV on to
+     * watch what is on a drive, and look for it with the HDMI ports. Xiaomi's 高清播放器 (verified on
+     * MiTV-MFTR0) and TCL's 媒体中心 (MT5879) both list the drives plugged in on their first page.
+     */
+    private fun usbSource(context: Context): TvSource? {
+        val player = USB_PLAYERS.firstOrNull { runCatching { context.packageManager.getActivityInfo(it, 0) }.isSuccess } ?: return null
+        return TvSource(
+            id = USB_SOURCE_ID,
+            label = "USB",
+            kind = SourceKind.Usb,
+            // Whether a drive is in is not followed: the list is read once with the apps.
+            connected = false,
+            deviceName = null,
+            intent = Intent(Intent.ACTION_MAIN).setComponent(player)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED),
+        )
+    }
+
+    const val USB_SOURCE_ID = "usb"
+
+    private val USB_PLAYERS = listOf(
+        ComponentName("com.xiaomi.mitv.mediaexplorer", "com.xiaomi.mitv.mediaexplorer.NewScraperMainEntryActivity"),
+        ComponentName("com.tcl.ui_mediaCenter", "com.tcl.ui_mediaCenter.main.MainActivity"),
+    )
 
     private fun frameworkSources(context: Context): List<TvSource> {
         val tim = context.getSystemService<TvInputManager>() ?: return emptyList()
@@ -258,7 +337,7 @@ object SystemProbe {
                 }
                 val label = runCatching { info.loadLabel(context).toString() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val state = runCatching { tim.getInputState(info.id) }.getOrDefault(TvInputManager.INPUT_STATE_DISCONNECTED)
-                val intent = (if (xiaomi) xiaomiRoute(info, kind, profile) else null)
+                val intent = (if (xiaomi) xiaomiRoute(info, kind, label, profile) else null)
                     ?: genericRoute(info, kind)
                 // CEC devices register as child inputs of the port they are plugged into.
                 val device = infos.firstOrNull { it.parentId == info.id }
@@ -308,9 +387,37 @@ object SystemProbe {
         )
     }
 
+    private const val WHALEY_PLAYER = "com.whaley.tv.tvplayer.ui"
+
+    /**
+     * Whaley (微鲸 WTV55K1J, MStar, Android 5.0) registers no inputs either. Its player switches when
+     * started with the input's ordinal, which the reporter of issue #292 found port by port: HDMI 1–3
+     * are 4–6 and AV is 7 (0–3 are the tuners, which that TV has no hardware for). Not tried here.
+     */
+    private fun whaleySources(context: Context): List<TvSource> {
+        val player = ComponentName(WHALEY_PLAYER, "com.whaley.tv.tvplayer.ui.RootActivity")
+        if (runCatching { context.packageManager.getActivityInfo(player, 0) }.isFailure) return emptyList()
+        fun source(ordinal: Int, kind: SourceKind, label: String) = TvSource(
+            id = "whaley:$ordinal",
+            label = label,
+            kind = kind,
+            connected = false,
+            deviceName = null,
+            intent = Intent("com.whaley.tv.tvplayer.ui.START_TV_PLAYER").setComponent(player)
+                .putExtra("inputSrc", ordinal)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        return listOf(
+            source(4, SourceKind.Hdmi, "HDMI 1"),
+            source(5, SourceKind.Hdmi, "HDMI 2"),
+            source(6, SourceKind.Hdmi, "HDMI 3"),
+            source(7, SourceKind.Av, context.getString(R.string.input_av)),
+        )
+    }
+
     private fun hw(id: String): Int? = Regex("/HW(\\d+)$").find(id)?.groupValues?.get(1)?.toIntOrNull()
 
-    private fun xiaomiRoute(info: TvInputInfo, kind: SourceKind, profile: DeviceProfile): Intent? {
+    private fun xiaomiRoute(info: TvInputInfo, kind: SourceKind, label: String, profile: DeviceProfile): Intent? {
         val n = hw(info.id) ?: return null
         return when (kind) {
             // MediaTek hardware ids HW5.. map onto Xiaomi's source ids 23.. for HDMI; models that
@@ -328,13 +435,22 @@ object SystemProbe {
             SourceKind.Av -> Intent("com.xiaomi.mitv.tvplayer.EXTSRC_PLAY")
                 .setComponent(ComponentName(XIAOMI_PLAYER, "$XIAOMI_PLAYER.ExternalSourceActivity"))
                 .putExtra("input", 2)
-            SourceKind.Tuner -> if (n == 0) {
+            // MediaTek has the digital tuner at HW0 and the analogue one at HW1 (MiTV-MFTP0 labels
+            // them "Tuner(DTV)" and "Tuner(ATV)"); Amlogic has "ATV" at HW0 and "DTV" at HW10
+            // (MiTV4-ANSM0, issue #291), so the label decides where it names one.
+            SourceKind.Tuner -> if (isDigitalTuner(label, n)) {
                 Intent("com.xiaomi.mitv.tvplayer.DTMB_PLAY").setComponent(ComponentName(XIAOMI_PLAYER, "$XIAOMI_PLAYER.dtmb.DTMBActivity"))
             } else {
                 Intent("com.xiaomi.mitv.tvplayer.ATV_PLAY").setComponent(ComponentName(XIAOMI_PLAYER, "$XIAOMI_PLAYER.AtvActivity"))
             }
-            SourceKind.Other -> null
+            SourceKind.Usb, SourceKind.Other -> null
         }
+    }
+
+    private fun isDigitalTuner(label: String, hw: Int): Boolean = when {
+        label.contains("ATV", ignoreCase = true) -> false
+        label.contains("DTV", ignoreCase = true) || label.contains("DTMB", ignoreCase = true) -> true
+        else -> hw == 0
     }
 
     private fun genericRoute(info: TvInputInfo, kind: SourceKind): Intent =

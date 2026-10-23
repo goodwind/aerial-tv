@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.edit
+import app.orchard.tv.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,10 +66,14 @@ enum class ScreensaverMode(val key: String) {
 object Wallpapers {
     private const val TAG = "AerialWallpaper"
     const val LATEST_DAILY = "daily:latest"
+    private const val DAILY_RETRY_MS = 30 * 60 * 1000L
     const val AUTO = "auto"
     const val LIVE = "aerial:live"
     const val MIX = "mix:auto"
     private const val DEFAULT_FALLBACK = "grad:aurora"
+
+    /** The built-ins Personalize offers, one or two of each family; the rest stay for whoever chose them. */
+    val FEATURED_BUILTINS = setOf("grad:hills_dawn", "grad:hills_night", "grad:dunes_gold", "grad:sea_sunset", "grad:waves_blue", "grad:aurora")
 
     private lateinit var app: Context
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -77,6 +82,7 @@ object Wallpapers {
     private val dailyDir by lazy { File(app.filesDir, "daily").apply { mkdirs() } }
     private val photoDir by lazy { File(app.filesDir, "photos").apply { mkdirs() } }
     private val liveFrame by lazy { File(app.filesDir, "live-frame.jpg") }
+    private val bakedDir by lazy { File(app.filesDir, "backdrop").apply { mkdirs() } }
     private val thumbs = HashMap<String, Bitmap>()
 
     var items by mutableStateOf<List<Wallpaper>>(emptyList()); private set
@@ -122,6 +128,7 @@ object Wallpapers {
         screensaver = ScreensaverMode.of(prefs.getString("screensaver", null))
         Mix.init(context)
         rebuildList()
+        loadBaked()
         rebuildBackdrop()
         scope.launch { refreshDaily() }
         if (selectedId == MIX) Mix.onSelected()
@@ -225,6 +232,8 @@ object Wallpapers {
             val wp = resolve(id) ?: resolve(DEFAULT_FALLBACK)
             // A picture picked to stay is on its way: the wall keeps what it has until it is here.
             if (wp?.kind == WallpaperKind.Mix && fileFor(wp)?.exists() != true) return@launch
+            val key = wp?.let(::bakedKey)
+            if (key != null && key == bakedKey && backdrop != null) return@launch
             val (bmp, frost) = withContext(Dispatchers.Default) {
                 val picture = wp?.let { picture(it, screenW, screenH) }
                 // Frosted from the picture before the home shading: the glass sits low on the
@@ -234,16 +243,71 @@ object Wallpapers {
             }
             backdrop = bmp?.asImageBitmap()
             frosted = frost?.asImageBitmap()
+            if (key != null && bmp != null && frost != null) saveBaked(key, bmp, frost)
+        }
+    }
+
+    // ---- the baked backdrop, kept for the next start ----
+
+    /**
+     * What the backdrop on disk was baked from; null when there is none. Baking takes a cold start
+     * about two seconds on Xiaomi MiTV-MFTR0 (decoding, or drawing a built-in picture pixel by pixel,
+     * then shading and frosting), and Home showed black, then the focused app's light, meanwhile
+     * (issues #277, #294). Reading the baked pair back takes tens of milliseconds.
+     */
+    private var bakedKey: String? = null
+
+    /** Changes with the picture behind [wp], the screen size, and Aerial's version (the baking may change). */
+    private fun bakedKey(wp: Wallpaper): String {
+        val stamp = when (wp.kind) {
+            // The auto wallpaper keeps its id as the picture changes, so the file stamps it.
+            WallpaperKind.Daily, WallpaperKind.Photo, WallpaperKind.Mix -> fileFor(wp)?.lastModified() ?: 0L
+            WallpaperKind.Live -> liveFrame.lastModified()
+            else -> 0L
+        }
+        return "${wp.id}|$stamp|${screenW}x$screenH|${BuildConfig.VERSION_CODE}"
+    }
+
+    /**
+     * Puts the last baked backdrop up at once, on the main thread, so Home's first frame has it. Even
+     * one that is out of date (a new day's photo): it is the picture Home last showed, and the fresh
+     * one crossfades in once baked. Not in "Follow App", which has no backdrop.
+     */
+    private fun loadBaked() {
+        if (selectedId == AUTO) return
+        runCatching {
+            val key = File(bakedDir, "key").takeIf { it.exists() }?.readText() ?: return
+            val home = BitmapFactory.decodeFile(File(bakedDir, "home.jpg").path) ?: return
+            val frost = BitmapFactory.decodeFile(File(bakedDir, "frost.png").path) ?: return
+            if (home.width != screenW || home.height != screenH) return
+            backdrop = home.asImageBitmap()
+            frosted = frost.asImageBitmap()
+            bakedKey = key
+        }.onFailure { Log.w(TAG, "could not read the baked backdrop", it) }
+    }
+
+    private suspend fun saveBaked(key: String, home: Bitmap, frost: Bitmap) {
+        bakedKey = key
+        withContext(Dispatchers.IO) {
+            runCatching {
+                // The key last, so a write cut short is never taken for a good one.
+                File(bakedDir, "key").delete()
+                File(bakedDir, "home.jpg").outputStream().use { home.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+                File(bakedDir, "frost.png").outputStream().use { frost.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                File(bakedDir, "key").writeText(key)
+            }.onFailure { Log.w(TAG, "could not keep the baked backdrop", it) }
         }
     }
 
     /**
      * The frame a moving wallpaper film stopped on becomes the wallpaper's picture: shaded, frosted
      * and kept for the next start. Returns once Home has it. [frame] is screen-sized and is used up.
+     * It was [atMs] into [film], where the film picks up when it next moves ([liveSpot]).
      */
-    suspend fun useLiveFrame(frame: Bitmap) {
+    suspend fun useLiveFrame(frame: Bitmap, film: String, atMs: Long) {
         if (selectedId != LIVE) return
         backdropJob?.cancel()
+        prefs.edit { putString("live_film", film).putLong("live_at", atMs) }
         val (bmp, frost) = withContext(Dispatchers.Default) {
             runCatching { liveFrame.outputStream().use { frame.compress(Bitmap.CompressFormat.JPEG, 90, it) } }
                 .onFailure { Log.w(TAG, "could not keep the film's frame", it) }
@@ -254,6 +318,32 @@ object Wallpapers {
         synchronized(thumbs) { thumbs.remove(LIVE) }
         backdrop = bmp.asImageBitmap()
         frosted = frost.asImageBitmap()
+        resolve(LIVE)?.let { saveBaked(bakedKey(it), bmp, frost) }
+    }
+
+    /**
+     * The film and moment the wallpaper's picture was taken from, so the film starts again on the
+     * picture on screen rather than cutting to another place. Null until one has stopped on a frame.
+     */
+    fun liveSpot(): Pair<String, Long>? {
+        val film = prefs.getString("live_film", null)?.takeIf { it.isNotEmpty() } ?: return null
+        return film to prefs.getLong("live_at", 0L)
+    }
+
+    /**
+     * The glass for a moving wallpaper film that has just stopped, from a small frame near it: the
+     * plate can stand over the paused film at once, before the exact frame is decoded for
+     * [useLiveFrame]. [frame] is used up.
+     */
+    suspend fun useLiveFrost(frame: Bitmap) {
+        if (selectedId != LIVE) return
+        backdropJob?.cancel()
+        frosted = withContext(Dispatchers.Default) { Images.frost(frame) }.asImageBitmap()
+    }
+
+    /** Puts back the glass from before [useLiveFrost] when the exact frame could not be had. */
+    fun restoreFrost(before: ImageBitmap?) {
+        if (selectedId == LIVE && before != null) frosted = before
     }
 
     private fun rebuildList() {
@@ -291,15 +381,39 @@ object Wallpapers {
     private var dailyFailed = false
 
     /**
-     * Bing publishes one photo a day; checking a few times a day is plenty. A check that failed,
-     * usually because the TV was on before its network was, is retried as soon as the network
-     * connects ([networkCameUp]), or else a few minutes later (issue #129).
+     * Bing publishes one photo a day, at midnight in China; checking a few times a day is plenty,
+     * plus once the day has turned (the date-change broadcast, or the first look after it), retried
+     * every half hour until the new photo is out: a TV left on Home overnight kept yesterday's
+     * photo for up to six hours (issue #286). A check that failed, usually because the TV was on
+     * before its network was, is retried as soon as the network connects ([networkCameUp]), or
+     * else a few minutes later (issue #129).
      */
     fun refreshDailyIfStale(networkCameUp: Boolean = false) {
         if (!started) return
         val since = System.currentTimeMillis() - lastDailyRefresh
-        val due = since >= 6 * 60 * 60 * 1000L || (dailyFailed && (networkCameUp || since >= 10 * 60 * 1000L))
+        val due = since >= 6 * 60 * 60 * 1000L ||
+            (dailyFailed && (networkCameUp || since >= 10 * 60 * 1000L)) ||
+            (!hasTodaysDaily() && since >= DAILY_RETRY_MS)
         if (due) scope.launch { refreshDaily() }
+    }
+
+    /** Bing's dates are China's, as yyyyMMdd. */
+    private fun hasTodaysDaily(): Boolean {
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+            .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
+        return readDailyIndex().any { it.first >= today }
+    }
+
+    private var dailyRetry: Job? = null
+
+    /** Looks again in half an hour while today's photo is not out; Home may stay up all night. */
+    private fun retryDailyLater() {
+        dailyRetry?.cancel()
+        if (hasTodaysDaily()) return
+        dailyRetry = scope.launch {
+            kotlinx.coroutines.delay(DAILY_RETRY_MS)
+            refreshDailyIfStale()
+        }
     }
 
     suspend fun refreshDaily() = io.withLock {
@@ -330,6 +444,7 @@ object Wallpapers {
                 true
             }.onFailure { Log.w(TAG, "daily photos unavailable", it) }.isSuccess.also { dailyFailed = !it }
         }
+        retryDailyLater()
         if (added) {
             synchronized(thumbs) { thumbs.remove(LATEST_DAILY) }
             rebuildList()

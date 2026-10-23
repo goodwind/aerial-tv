@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
@@ -129,10 +130,14 @@ fun AppTile(
     modifier: Modifier = Modifier,
     /** Last tile of its row: Right stops here instead of finding the status pill above (#211). */
     rowEnd: Boolean = false,
+    /** False on the glass plate: the top row shows no names there, as on tvOS 26. */
+    showName: Boolean = true,
+    /** The name sits on the glass plate, which ends just under it: it does not step down past the focus frame. */
+    nameOnPlate: Boolean = false,
 ) {
     val reduced = LocalReducedMotion.current
     // The tile's face at its drawn size, made on first draw and kept while the artwork lasts.
-    val faceFor = remember(app.art) { arrayOfNulls<Pair<IntSize, ImageBitmap>>(1) }
+    val faceFor = remember(app.art) { arrayOfNulls<Pair<IntSize, ImageBitmap>>(2) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
@@ -231,8 +236,7 @@ fun AppTile(
                 Modifier
                     .size(width, height)
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
+                        zoom(scale)
                         rotationY = leanY.value
                         rotationX = leanX.value
                         rotationZ = wobble?.value ?: 0f
@@ -252,8 +256,7 @@ fun AppTile(
                 .size(width, height)
                 .onGloballyPositioned { bounds = it.boundsInWindow() }
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    zoom(scale)
                     rotationY = leanY.value
                     rotationX = leanX.value
                     rotationZ = wobble?.value ?: 0f
@@ -377,24 +380,36 @@ fun AppTile(
                 // The plate is a picture made once: the artwork cut to the continuous outline with
                 // its rim, so a tile is one image draw, as before. Cut on the GPU (a path, or masks
                 // sampled with the artwork) it took the Xiaomi MFTR0 from 11ms to 15-72ms a frame.
-                val face = faceFor[0]?.takeIf { it.first == full }?.second
-                    ?: tileFace(art.back, w, h, Corner.toPx(), 0.5.dp.toPx()).also { faceFor[0] = full to it }
+                // There are two, each shown pixel for pixel: one at rest size, and one at the focused
+                // size, made the first time the tile is focused. With only the rest one, the focus
+                // zoom stretched it and banners read soft (issue #307); with only the focused one,
+                // tiles at rest were shrunk and lost a little.
+                val fw = focusedPx(size.width)
+                val fh = focusedPx(size.height)
+                fun face(i: Int, fw: Int, fh: Int): ImageBitmap = faceFor[i]?.takeIf { it.first == full }?.second
+                    ?: tileFace(art.back, fw, fh, Corner.toPx() * fw / w, 0.5.dp.toPx() * fw / w).also { faceFor[i] = full to it }
                 val shape = BitmapShader(smoothMask(w, h, Corner.toPx()), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
                     .apply { setLocalMatrix(Matrix().apply { setScale(size.width / w, size.height / h) }) }
                 val rim = tileRim(w, h, Corner.toPx(), 0.5.dp.toPx())
                 onDrawBehind {
-                    drawImage(face, dstSize = full)
-                    art.fore?.let { fore ->
-                        val at = art.foreAt
-                        // Parallax: the logo travels further than the plate when the tile leans.
-                        val px = leanY.value / 7f * size.width * 0.035f
-                        val py = -leanX.value / 7f * size.height * 0.035f
-                        drawImage(
-                            fore,
-                            dstOffset = IntOffset((at.left * size.width + px).roundToInt(), (at.top * size.height + py).roundToInt()),
-                            dstSize = IntSize((at.width * size.width).roundToInt(), (at.height * size.height).roundToInt()),
-                            filterQuality = FilterQuality.Medium,
-                        )
+                    // Plate and logo are placed in the face's pixels; at focus the zoom undoes the scale.
+                    val lifted = scale > (1f + FOCUSED_SCALE) / 2f
+                    val pw = if (lifted) fw else w
+                    val ph = if (lifted) fh else h
+                    scale(size.width / pw, size.height / ph, pivot = Offset.Zero) {
+                        drawImage(face(if (lifted) 1 else 0, pw, ph))
+                        art.fore?.let { fore ->
+                            val at = art.foreAt
+                            // Parallax: the logo travels further than the plate when the tile leans.
+                            val px = leanY.value / 7f * pw * 0.035f
+                            val py = -leanX.value / 7f * ph * 0.035f
+                            drawImage(
+                                fore,
+                                dstOffset = IntOffset((at.left * pw + px).roundToInt(), (at.top * ph + py).roundToInt()),
+                                dstSize = IntSize((at.width * pw).roundToInt(), (at.height * ph).roundToInt()),
+                                filterQuality = FilterQuality.Medium,
+                            )
+                        }
                     }
                     if (lift > 0.01f) {
                         // Light from above: a soft sheen across the top, brighter where the tile leans toward it.
@@ -418,8 +433,7 @@ fun AppTile(
                 Modifier
                     .size(width, height)
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
+                        zoom(scale)
                         rotationY = leanY.value
                         rotationX = leanX.value
                         rotationZ = wobble?.value ?: 0f
@@ -444,7 +458,7 @@ fun AppTile(
             }
         }
 
-        BasicText(
+        if (showName) BasicText(
             text = app.label,
             style = Type.Headline.copy(
                 textAlign = TextAlign.Center,
@@ -458,13 +472,12 @@ fun AppTile(
                 .offset(y = height + 10.dp)
                 .requiredSize(width + 36.dp, 24.dp)
                 .graphicsLayer {
-                    // Only the focused app shows its name, top row included (tvOS 26 hides it on the
-                    // glass, but people read that as a bug: #196 #199 #219). With every name shown,
-                    // the others stay a little dimmer than the focused one.
+                    // Only the focused app shows its name. With every name shown, the others stay a
+                    // little dimmer than the focused one.
                     alpha = if (AerialSettings.showAllNames) 0.7f + 0.3f * lift else lift
                     // Sits just under the lifted tile, and rises into place as it appears.
                     translationY = height.toPx() * (scale - 1f) / 2f - (1f - lift) * 6.dp.toPx() +
-                        ring * ringIn * (RingGap + RingWidth).toPx() * scale
+                        if (nameOnPlate) 0f else ring * ringIn * (RingGap + RingWidth).toPx() * scale
                 },
         )
     }
@@ -475,6 +488,24 @@ fun AppTile(
  * The tile at rest: [back] cut to the continuous outline, with a hairline rim as on tvOS icons so
  * dark artwork still reads against black.
  */
+/**
+ * A side of the focused tile in pixels: about [FOCUSED_SCALE] times [px], grown by the same whole
+ * number of pixels at both ends, so a face of this size lands exactly on the screen's pixels. At
+ * 294 px × 1.15 = 338.1 the face drifted across pixel boundaries and was resampled on the screen,
+ * which cost about as much sharpness as the stretch it replaced (Xiaomi MiTV-MFTR0, issue #307).
+ */
+private fun focusedPx(px: Float): Int {
+    val r = px.roundToInt()
+    return r + 2 * (r * (FOCUSED_SCALE - 1f) / 2f).roundToInt()
+}
+
+/** The tile's zoom for [scale], per axis, so that at [FOCUSED_SCALE] each side is exactly [focusedPx]. */
+private fun GraphicsLayerScope.zoom(scale: Float) {
+    val t = (scale - 1f) / (FOCUSED_SCALE - 1f)
+    scaleX = 1f + t * (focusedPx(size.width) / size.width - 1f)
+    scaleY = 1f + t * (focusedPx(size.height) / size.height - 1f)
+}
+
 private fun tileFace(back: ImageBitmap, w: Int, h: Int, radius: Float, rimWidth: Float): ImageBitmap {
     val src = back.asAndroidBitmap()
     val bitmap = createBitmap(w, h)
