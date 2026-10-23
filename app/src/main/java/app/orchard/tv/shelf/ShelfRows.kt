@@ -21,8 +21,6 @@ data class RawProgram(
     val lastEngagedMillis: Long,
     val positionMillis: Long,
     val durationMillis: Long,
-    /** The owner's id for the title; the same title on two channels shares it. */
-    val contentId: String? = null,
     /** The season and episode as the owner numbers them (display numbers); blank or 0 for none. */
     val season: String? = null,
     val episodeNumber: String? = null,
@@ -72,12 +70,8 @@ object ShelfRows {
             previews.filter { it.channelId in rank }
                 .sortedWith(compareBy<RawProgram> { rank.getValue(it.channelId) }.thenByDescending { it.weight })
         val seen = HashSet<String>()
-        // A program may be published without a description where the same title, on another
-        // channel or in watch next, has one.
-        val described = (watchNext + previews).filter { !it.contentId.isNullOrBlank() && !it.description.isNullOrBlank() }
-            .associate { it.contentId!! to it.description!! }
         return ordered.asSequence()
-            .mapNotNull { item(it, channelTitles, described) }
+            .mapNotNull { item(it, channelTitles) }
             .filter { seen.add(it.intentUri) }
             // The limit is per channel: a long one must not crowd out the next.
             .groupBy { it.channel }.values.flatMap { it.take(LIMIT) }
@@ -87,11 +81,11 @@ object ShelfRows {
     fun tabs(items: List<ShelfItem>): List<ShelfTab> =
         items.groupBy { it.channel }.map { (channel, list) -> ShelfTab(channel, list.first().channelTitle, list) }
 
-    private fun item(p: RawProgram, channelTitles: Map<Long, String>, described: Map<String, String>): ShelfItem? {
+    private fun item(p: RawProgram, channelTitles: Map<Long, String>): ShelfItem? {
         val link = p.intentUri?.takeIf { it.isNotBlank() } ?: return null
         val title = p.title?.takeIf { it.isNotBlank() } ?: return null
         // Some owners publish an empty string for "none".
-        val description = (p.description?.takeIf { it.isNotBlank() } ?: p.contentId?.let(described::get))?.trim()?.takeIf { it.isNotEmpty() }
+        val description = p.description?.trim()?.takeIf { it.isNotEmpty() }
         val progress = if (p.durationMillis > 0 && p.positionMillis in 1..p.durationMillis) {
             p.positionMillis.toFloat() / p.durationMillis
         } else null

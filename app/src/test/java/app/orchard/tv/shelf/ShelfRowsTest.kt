@@ -18,12 +18,11 @@ class ShelfRowsTest {
         thumb: String? = null,
         episode: String? = null,
         description: String? = null,
-        contentId: String? = null,
         season: String? = null,
         episodeNo: String? = null,
     ) = RawProgram(
         title, episode, description, poster, thumb, aspect, intent, channel, weight, engaged, position, duration,
-        contentId = contentId, season = season, episodeNumber = episodeNo,
+        season = season, episodeNumber = episodeNo,
     )
 
     @Test fun `watch next comes first, most recently engaged first`() {
@@ -180,26 +179,7 @@ class ShelfRowsTest {
         assertNull(items[2].leftMillis)
     }
 
-    @Test fun `a program without a description borrows the one its content has elsewhere in the app`() {
-        val items = ShelfRows.arrange(
-            watchNext = listOf(prog("a", contentId = "7", description = "about a", engaged = 1)),
-            previews = listOf(prog("a again", contentId = "7", channel = 1, intent = "app://x"), prog("b", contentId = "8", channel = 1)),
-            channelOrder = listOf(1),
-        )
-        assertEquals("about a", items.first { it.title == "a again" }.description)
-        assertNull(items.first { it.title == "b" }.description)
-    }
-
-    @Test fun `an empty description counts as none, so it borrows too`() {
-        val items = ShelfRows.arrange(
-            watchNext = listOf(prog("a", contentId = "7", description = "about a", engaged = 1)),
-            previews = listOf(prog("a again", contentId = "7", description = "", channel = 1, intent = "app://x")),
-            channelOrder = listOf(1),
-        )
-        assertEquals("about a", items.first { it.title == "a again" }.description)
-    }
-
-    @Test fun `an empty description with nothing to borrow stays none`() {
+    @Test fun `a blank description counts as none`() {
         val a = ShelfRows.arrange(emptyList(), listOf(prog("a", description = "  ", channel = 1)), listOf(1)).single()
         assertNull(a.description)
     }
