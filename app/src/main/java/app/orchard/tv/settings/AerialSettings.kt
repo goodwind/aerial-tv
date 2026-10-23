@@ -190,14 +190,10 @@ object AerialSettings {
         clockRight = prefs.getBoolean("clock_right", false)
         largeClock = prefs.getBoolean("large_clock", false)
         homePlate = prefs.getBoolean("home_plate", true)
-<<<<<<< HEAD
         // Before this setting had three modes it was a boolean "show every name"; keep old installs.
         nameMode = NameMode.of(prefs.getString("name_mode", null))
             ?: if (prefs.getBoolean("show_all_names", false)) NameMode.All else NameMode.Focused
-=======
         adbAccess = prefs.getBoolean("adb_access", false)
-        showAllNames = prefs.getBoolean("show_all_names", false)
->>>>>>> app-info-adb
         // Before 1.28 this was on or off; on meant whichever sounds Aerial played.
         uiSounds = UiSounds.of(prefs.getString("ui_sounds_kind", null)) ?: when {
             !prefs.getBoolean("ui_sounds", true) -> UiSounds.Off

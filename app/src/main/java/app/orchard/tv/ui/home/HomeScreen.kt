@@ -81,15 +81,12 @@ import app.orchard.tv.HomeViewModel
 import app.orchard.tv.Overlay
 import app.orchard.tv.R
 import app.orchard.tv.settings.AerialSettings
-<<<<<<< HEAD
 import app.orchard.tv.settings.AppContentMode
 import app.orchard.tv.shelf.Shelf
 import app.orchard.tv.shelf.ShelfImages
 import app.orchard.tv.shelf.ShelfItem
 import app.orchard.tv.settings.NameMode
-=======
 import app.orchard.tv.apps.AppDetails
->>>>>>> app-info-adb
 import app.orchard.tv.apps.AppEntry
 import app.orchard.tv.ui.control.ControlCenter
 import app.orchard.tv.ui.wallpaper.WallpaperSheet
