@@ -72,7 +72,11 @@ class MainActivity : ComponentActivity() {
     private val vm by viewModels<HomeViewModel>()
 
     private val packageReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = vm.reload()
+        override fun onReceive(context: Context, intent: Intent) {
+            vm.reload()
+            // A newly installed app is asked to publish its channels, as the TV launcher would.
+            lifecycleScope.launch { Shelf.askToPublish() }
+        }
     }
 
     private val volumeReceiver = object : BroadcastReceiver() {
@@ -405,6 +409,7 @@ class MainActivity : ComponentActivity() {
         GuardSetup.ensureEnabled(this)
         idleHandler.postDelayed({ GuardSetup.rebindIfStalled(this) }, 5_000)
         vm.reloadIfPackagesChanged()
+        lifecycleScope.launch { Shelf.askToPublish() }
         ContextCompat.registerReceiver(
             this, packageReceiver,
             IntentFilter().apply {
