@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import app.orchard.tv.ui.components.focusRing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -434,16 +436,20 @@ private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?, onFocu
         },
     ) { state ->
         LaunchedEffect(state.focused) { if (state.focused) onFocused() }
+        val highContrast = AerialSettings.focusStyle == FocusStyle.HighContrast
+        val ring by animateFloatAsState(if (state.focused && highContrast) 1f else 0f, tween(140, easing = Motion.EaseOut), label = "card-ring")
         Column(Modifier.width(168.dp)) {
             Box(
                 Modifier
                     .size(168.dp, 94.dp)
+                    // The high-contrast frame lies outside the card, so it goes before the clip.
+                    .focusRing(12.dp, ring)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Palette.Fill)
                     .border(
-                        if (state.focused || selected) 3.dp else 1.dp,
+                        if (state.focused && !highContrast || selected) 3.dp else 1.dp,
                         when {
-                            state.focused -> Palette.Focus
+                            state.focused && !highContrast -> Palette.Focus
                             selected -> Palette.Focus.copy(alpha = 0.55f)
                             else -> Palette.Hairline
                         },
