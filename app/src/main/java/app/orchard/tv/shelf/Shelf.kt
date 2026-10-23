@@ -100,29 +100,32 @@ object Shelf {
      */
     private fun readAll(): Map<String, List<ShelfItem>> {
         val r = app.contentResolver
-        val channels = r.query(CHANNELS, arrayOf("_id", "package_name", "browsable"), null, null, null)?.use { c ->
-            buildList { while (c.moveToNext()) add(Triple(c.getString(1).orEmpty(), c.getLong(0), c.getInt(2) == 1)) }
+        val channels = r.query(CHANNELS, arrayOf("_id", "package_name", "browsable", "display_name"), null, null, null)?.use { c ->
+            buildList { while (c.moveToNext()) add(Channel(c.getString(1).orEmpty(), c.getLong(0), c.getInt(2) == 1, c.getString(3)?.trim().orEmpty())) }
         }.orEmpty()
         val watchNext = query(WATCH_NEXT, PROGRAM_COLUMNS + "last_engagement_time_utc_millis")
         val previews = query(PREVIEWS, PROGRAM_COLUMNS + "channel_id")
-        val packages = (channels.map { it.first } + watchNext.map { it.first } + previews.map { it.first }).toSet()
+        val packages = (channels.map { it.pkg } + watchNext.map { it.first } + previews.map { it.first }).toSet()
         // One line per read, so `adb logcat -s Shelf` answers "does this app publish anything?".
         Log.i(TAG, "read " + packages.sorted().joinToString { pkg ->
-            "$pkg: ${channels.count { it.first == pkg }} channels, ${watchNext.count { it.first == pkg }} watch next, ${previews.count { it.first == pkg }} previews"
+            "$pkg: ${channels.count { it.pkg == pkg }} channels, ${watchNext.count { it.first == pkg }} watch next, ${previews.count { it.first == pkg }} previews"
         }.ifEmpty { "nothing published" })
         return packages.associateWith { pkg ->
             // The channels the owner chose for the home screen. Browsable is written by the
             // system's own launcher; where it never ran or never asked, every channel of the app
             // reads as hidden, so then all of them count rather than none.
-            val own = channels.filter { it.first == pkg }.sortedBy { it.second }
-            val order = own.filter { it.third }.ifEmpty { own }.map { it.second }
+            val own = channels.filter { it.pkg == pkg }.sortedBy { it.id }
+            val order = own.filter { it.browsable }.ifEmpty { own }.map { it.id }
             ShelfRows.arrange(
                 watchNext.filter { it.first == pkg }.map { it.second },
                 previews.filter { it.first == pkg }.map { it.second },
                 order,
+                own.filter { it.name.isNotEmpty() }.associate { it.id to it.name },
             )
         }.filterValues { it.isNotEmpty() }
     }
+
+    private class Channel(val pkg: String, val id: Long, val browsable: Boolean, val name: String)
 
     /** Only what the shelf shows: rows also carry blobs (internal_provider_data) it never reads. */
     private val PROGRAM_COLUMNS = arrayOf(
