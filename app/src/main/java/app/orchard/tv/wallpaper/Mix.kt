@@ -273,7 +273,9 @@ object Mix {
                 val to = URL(URL(url), c.getHeaderField("Location")).toString()
                 return fetch(to, emptyMap(), redirects - 1)
             }
-            if (c.contentLengthLong > MAX_BYTES) error("too big: ${c.contentLengthLong}")
+            // contentLengthLong needs API 24; the header says the same on every level.
+            val length = c.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+            if (length > MAX_BYTES) error("too big: $length")
             return c.inputStream.use { it.readBytes() }.also { if (it.size > MAX_BYTES) error("too big") }
         } finally {
             c.disconnect()
