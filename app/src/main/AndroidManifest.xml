@@ -103,9 +103,10 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density" />
 
         <!--
-            Stands in for the settings screens a firmware lacks (Xiaomi HyperOS on MiTV-MFTR0 has no
-            App Info, so File Manager+ showed "Error"). MainActivity switches it on only when no other
-            app answers the App Info intent.
+            Stand in for the settings screens a firmware lacks (Xiaomi HyperOS on MiTV-MFTR0 has no
+            App Info, so File Manager+ showed "Error"). One alias per screen: MainActivity switches
+            each on only when no other app answers its intent, so a firmware that has the screen
+            never shows an "Open with" choice for it.
         -->
         <activity-alias
             android:name=".AppInfoEntry"
@@ -114,9 +115,49 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".AllFilesAccessEntry"
+            android:targetActivity=".AppInfoActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
                 <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".OverlayEntry"
+            android:targetActivity=".AppInfoActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
                 <action android:name="android.settings.action.MANAGE_OVERLAY_PERMISSION" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".WriteSettingsEntry"
+            android:targetActivity=".AppInfoActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
                 <action android:name="android.settings.action.MANAGE_WRITE_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".UnknownSourcesEntry"
+            android:targetActivity=".AppInfoActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
                 <action android:name="android.settings.MANAGE_UNKNOWN_APP_SOURCES" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="package" />

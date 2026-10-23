@@ -36,11 +36,12 @@ data class AppDetails(
 ) {
     companion object {
         /**
-         * Whether the firmware has an App Info screen of its own, not counting Aerial's entry for the
-         * same intent (see AppInfoEntry in the manifest). Xiaomi HyperOS on MiTV-MFTR0 has none.
+         * Whether the firmware has a screen of its own for [action] (App Info unless named), not
+         * counting Aerial's entries for it (the aliases in the manifest). Xiaomi HyperOS on
+         * MiTV-MFTR0 has no App Info.
          */
-        fun hasSystemScreen(context: Context): Boolean {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+        fun hasSystemScreen(context: Context, action: String = Settings.ACTION_APPLICATION_DETAILS_SETTINGS): Boolean {
+            val intent = Intent(action, Uri.fromParts("package", context.packageName, null))
             return context.packageManager.queryIntentActivities(intent, 0).any { it.activityInfo.packageName != context.packageName }
         }
 
