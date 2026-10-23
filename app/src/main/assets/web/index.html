@@ -135,7 +135,18 @@
 </form>
 <p class="hint" id="wxHint"></p>
 
+<<<<<<< HEAD
 <h2 data-i18n="add_h"></h2>
+=======
+<h2>Unsplash</h2>
+<form class="city" id="unsplashForm">
+  <input id="unsplashKey" type="password" placeholder="粘贴 Access Key" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button id="unsplashBtn">保存</button>
+</form>
+<p class="hint" id="unsplashHint"></p>
+
+<h2>从手机添加</h2>
+>>>>>>> auto-wallpapers
 <label class="upload" id="uploadBtn">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
   <span id="uploadLabel" data-i18n="upload_label"></span>
@@ -666,6 +677,7 @@ const weatherNames = { clear: t('wx_clear'), partlycloudy: t('wx_partlycloudy'),
 
 function renderWeather() {
   const w = state.weather || {};
+  $('#unsplashHint').textContent = state.unsplash ? '密钥已保存。留空并点保存可清除。' : '在电视「个性化 · 自动轮换」里使用。到 unsplash.com/developers 创建应用，把 Access Key 粘贴到这里。';
   $('#wxNow').textContent = w.celsius !== undefined ? `${w.celsius}° ${weatherNames[w.kind] || ''}` : '—';
   $('#wxPlace').textContent = w.place || '';
   const hint = $('#wxHint'); hint.innerHTML = '';
@@ -735,10 +747,13 @@ function render() {
     if (kind === 'daily' && list.length) {
       list = [{ id: state.latestDaily, kind: 'daily', title: t('daily_title'), caption: t('daily_caption') }, ...list];
     }
+<<<<<<< HEAD
     // Two or more photos: one a day, as on the TV (#27, #194).
     if (kind === 'photo' && list.length > 1) {
       list = [{ id: state.rotatePhotos, kind: 'photos', title: t('rotate_title'), caption: t('rotate_caption') }, ...list];
     }
+=======
+>>>>>>> auto-wallpapers
     if (!list.length && kind !== 'photo') continue;
     const h = document.createElement('h2'); h.textContent = title; root.appendChild(h);
     if (!list.length) {
@@ -772,6 +787,19 @@ $('#file').onchange = async e => {
     toast(state.added ? t('toast_added', { n: state.added }) : t('toast_no_photos'));
   } catch (err) { toast(t('toast_send_fail')); }
   btn.removeAttribute('disabled'); label.textContent = t('upload_label'); e.target.value = '';
+};
+
+$('#unsplashForm').onsubmit = async e => {
+  e.preventDefault();
+  const key = $('#unsplashKey').value.trim();
+  if (!key && !state.unsplash) return;
+  const btn = $('#unsplashBtn'); btn.setAttribute('disabled', '');
+  try {
+    state = await api('api/unsplash', { key }); render();
+    if (!state.ok) toast('这不像 Access Key，请检查');
+    else { toast(key ? '密钥已保存' : '密钥已清除'); $('#unsplashKey').value = ''; }
+  } catch (err) { toast('设置失败，请重试'); }
+  btn.removeAttribute('disabled');
 };
 
 $('#cityForm').onsubmit = async e => {
