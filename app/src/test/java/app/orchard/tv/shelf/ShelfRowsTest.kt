@@ -189,4 +189,18 @@ class ShelfRowsTest {
         assertEquals("about a", items.first { it.title == "a again" }.description)
         assertNull(items.first { it.title == "b" }.description)
     }
+
+    @Test fun `an empty description counts as none, so it borrows too`() {
+        val items = ShelfRows.arrange(
+            watchNext = listOf(prog("a", contentId = "7", description = "about a", engaged = 1)),
+            previews = listOf(prog("a again", contentId = "7", description = "", channel = 1, intent = "app://x")),
+            channelOrder = listOf(1),
+        )
+        assertEquals("about a", items.first { it.title == "a again" }.description)
+    }
+
+    @Test fun `an empty description with nothing to borrow stays none`() {
+        val a = ShelfRows.arrange(emptyList(), listOf(prog("a", description = "  ", channel = 1)), listOf(1)).single()
+        assertNull(a.description)
+    }
 }

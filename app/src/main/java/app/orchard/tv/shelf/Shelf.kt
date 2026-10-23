@@ -207,7 +207,7 @@ object Shelf {
                     str(pkgCol).orEmpty() to RawProgram(
                         title = str(title),
                         episodeTitle = str(episode),
-                        description = str(description) ?: str(longDescription),
+                        description = str(description)?.takeIf { it.isNotBlank() } ?: str(longDescription),
                         posterUri = posterUri,
                         thumbnailUri = str(thumb),
                         // The aspect of the picture the card will show.

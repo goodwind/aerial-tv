@@ -90,7 +90,8 @@ object ShelfRows {
     private fun item(p: RawProgram, channelTitles: Map<Long, String>, described: Map<String, String>): ShelfItem? {
         val link = p.intentUri?.takeIf { it.isNotBlank() } ?: return null
         val title = p.title?.takeIf { it.isNotBlank() } ?: return null
-        val description = (p.description ?: p.contentId?.let(described::get))?.trim()?.takeIf { it.isNotEmpty() }
+        // Some owners publish an empty string for "none".
+        val description = (p.description?.takeIf { it.isNotBlank() } ?: p.contentId?.let(described::get))?.trim()?.takeIf { it.isNotEmpty() }
         val progress = if (p.durationMillis > 0 && p.positionMillis in 1..p.durationMillis) {
             p.positionMillis.toFloat() / p.durationMillis
         } else null
