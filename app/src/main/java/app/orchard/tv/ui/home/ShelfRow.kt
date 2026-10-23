@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,13 +54,22 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.orchard.tv.shelf.ShelfImages
 import app.orchard.tv.shelf.ShelfItem
+import app.orchard.tv.shelf.ShelfRows
+import app.orchard.tv.shelf.ShelfTab
+import app.orchard.tv.R
 import app.orchard.tv.ui.components.isSelect
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
@@ -68,7 +78,10 @@ import app.orchard.tv.ui.theme.Type
 import kotlin.math.roundToInt
 
 /** One app's shelf: its package and its cards. */
-data class ShelfContent(val pkg: String, val items: List<ShelfItem>)
+data class ShelfContent(val pkg: String, val items: List<ShelfItem>) {
+    /** The cards by channel; more than one means the shelf shows tabs. */
+    val tabs: List<ShelfTab> = ShelfRows.tabs(items)
+}
 
 private const val FOCUSED_SCALE = 1.08f
 private val CardCorner = 10.dp
@@ -84,12 +97,13 @@ private fun cardWidth(height: Dp, aspect: Float): Dp = height * aspect.coerceIn(
  * moves inside it are instant and never leak to the grid's focus search; Down and Back hand focus
  * back to the app it belongs to ([onExit]).
  *
- * While focus is still on the app tile ([active] false) the row previews the shelf, dimmed; once
- * focus comes up, the selected card lifts as tiles do.
+ * The shelf is shown only while focus is up on it ([active]); with more than one channel, a strip
+ * of tabs stands over the title and Up moves into it, Left and Right change tab, Down comes back.
  */
 @Composable
 fun ShelfRow(
     content: ShelfContent,
+    tab: Int,
     selected: Int,
     active: Boolean,
     focusRequester: FocusRequester,
@@ -98,23 +112,28 @@ fun ShelfRow(
     screenWidth: Dp,
     cardHeight: Dp,
     onFocusChange: (Boolean) -> Unit,
+    onTab: (Int) -> Unit,
     onSelect: (Int) -> Unit,
     onOpen: (ShelfItem, Rect?) -> Unit,
     onExit: () -> Unit,
-    onUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
-    val items = content.items
+    val tabs = content.tabs
+    val tabIndex = tab.coerceIn(0, tabs.lastIndex)
+    val items = tabs[tabIndex].items
     val index = selected.coerceIn(0, items.lastIndex)
+    // Focus is on the strip of tabs rather than the cards.
+    var inTabs by remember { mutableStateOf(false) }
+    LaunchedEffect(active) { if (!active) inTabs = false }
     val select by rememberUpdatedState(onSelect)
     val open by rememberUpdatedState(onOpen)
-    val bounds = remember(content) { arrayOfNulls<Rect>(items.size) }
+    val bounds = remember(items) { arrayOfNulls<Rect>(items.size) }
     var pressed by remember { mutableStateOf(false) }
 
     // Card positions along the row, from the left margin.
-    val xs = remember(content, cardHeight) {
+    val xs = remember(items, cardHeight) {
         var x = 0.dp
         items.map { item -> x.also { x += cardWidth(cardHeight, item.aspect) + CardGap } }
     }
@@ -122,7 +141,7 @@ fun ShelfRow(
     // The row slides only as far as it must to keep the selected card clear of both margins, so a
     // press usually moves just the lift, as in a tvOS shelf. Kept when the app's programs update.
     val shift = remember { Animatable(0f) }
-    LaunchedEffect(index, content) {
+    LaunchedEffect(index, items) {
         with(density) {
             val left = xs[index].toPx()
             val right = left + cardWidth(cardHeight, items[index].aspect).toPx() * FOCUSED_SCALE
@@ -139,6 +158,17 @@ fun ShelfRow(
     val dim by animateFloatAsState(if (active) 1f else 0.78f, tween(220, easing = Motion.EaseOut), label = "shelf-dim")
 
     Column(modifier) {
+        if (tabs.size > 1) {
+            // Stands above the column without taking room in it, so the cards keep their place
+            // whether or not an app has more than one channel.
+            ShelfTabs(
+                tabs, tabIndex, focused = active && inTabs, margin = margin,
+                modifier = Modifier.layout { m, c ->
+                    val p = m.measure(c.copy(maxHeight = Constraints.Infinity))
+                    layout(p.width, 0) { p.place(0, -p.height) }
+                },
+            )
+        }
         // The summary: what the selected program is. The selection is kept when focus goes back
         // down to the app, so the row, the summary and the backdrop always agree.
         Crossfade(
@@ -175,17 +205,19 @@ fun ShelfRow(
                 .onKeyEvent { e ->
                     val down = e.type == KeyEventType.KeyDown
                     when (e.nativeKeyEvent.keyCode) {
-                        NativeKeyEvent.KEYCODE_DPAD_LEFT -> { if (down && index > 0) select(index - 1); true }
-                        NativeKeyEvent.KEYCODE_DPAD_RIGHT -> { if (down && index < items.lastIndex) select(index + 1); true }
-                        // Above the shelf there is only the status pill, the way to Control Center.
-                        NativeKeyEvent.KEYCODE_DPAD_UP -> { if (down) onUp(); true }
-                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> { if (down) onExit(); true }
+                        NativeKeyEvent.KEYCODE_DPAD_LEFT ->
+                            { if (down) { if (inTabs) { if (tabIndex > 0) onTab(tabIndex - 1) } else if (index > 0) select(index - 1) }; true }
+                        NativeKeyEvent.KEYCODE_DPAD_RIGHT ->
+                            { if (down) { if (inTabs) { if (tabIndex < tabs.lastIndex) onTab(tabIndex + 1) } else if (index < items.lastIndex) select(index + 1) }; true }
+                        // Up reaches the tabs, if there are any; Control Center is the other way round, to the right of the top row.
+                        NativeKeyEvent.KEYCODE_DPAD_UP -> { if (down && tabs.size > 1) inTabs = true; true }
+                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> { if (down) { if (inTabs) inTabs = false else onExit() }; true }
                         else -> if (e.isSelect()) {
                             // On release, and only for a press that began here (see Pressable).
                             if (down && e.nativeKeyEvent.repeatCount == 0) pressed = true
                             else if (e.type == KeyEventType.KeyUp && pressed) {
                                 pressed = false
-                                open(items[index], bounds[index])
+                                if (inTabs) inTabs = false else open(items[index], bounds[index])
                             }
                             true
                         } else false
@@ -205,8 +237,8 @@ fun ShelfRow(
                         .offset { IntOffset((margin + xs[i]).roundToPx() - shift.value.roundToInt(), 0) }
                         .graphicsLayer { alpha = dim }
                         .onGloballyPositioned { bounds[i] = it.boundsInWindow() }
-                        .pointerInput(item, i) {
-                            detectTapGestures {
+                        .pointerInput(item, i, active) {
+                            if (active) detectTapGestures {
                                 select(i)
                                 open(item, bounds[i])
                             }
@@ -305,6 +337,44 @@ private fun ShelfCard(
                 maxLines = 3, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
             )
+        }
+    }
+}
+
+
+/** The shelf's channels as a strip of labels; the chosen one is lit, and filled while focus is on the strip. */
+@Composable
+private fun ShelfTabs(tabs: List<ShelfTab>, selected: Int, focused: Boolean, margin: Dp, modifier: Modifier = Modifier) {
+    Row(
+        modifier.padding(start = margin, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        tabs.forEachIndexed { i, tab ->
+            val on = i == selected
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        when {
+                            on && focused -> Color.White
+                            on -> Color.White.copy(alpha = 0.22f)
+                            else -> Color.Transparent
+                        },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 5.dp),
+            ) {
+                BasicText(
+                    tab.title ?: stringResource(R.string.shelf_continue),
+                    style = Type.Callout.copy(
+                        color = when {
+                            on && focused -> Color.Black
+                            on -> Color.White
+                            else -> Color.White.copy(alpha = 0.6f)
+                        },
+                    ),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

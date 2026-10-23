@@ -127,7 +127,8 @@
     <string name="st_app_content">App Content</string>
     <string name="st_app_content_on">Show</string>
     <string name="st_app_content_off">Off</string>
-    <string name="st_app_content_hint">Above the top row, what the selected app offers: continue watching and its picks, as on Google TV. Apps that offer none keep the wallpaper.</string>
+    <string name="st_app_content_hint">An app that offers continue watching or its own picks shows a small arrow over its tile in the top row. Press Up for them, with a tab for each channel. Apps that offer none are left as they are.</string>
+    <string name="shelf_continue">Continue Watching</string>
     <string name="st_names">App Names</string>
     <string name="st_names_focused">Selected App</string>
     <string name="st_names_all">All Apps</string>

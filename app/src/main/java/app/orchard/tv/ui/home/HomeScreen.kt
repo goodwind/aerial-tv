@@ -87,6 +87,9 @@ import app.orchard.tv.wallpaper.ScreensaverMode
 import app.orchard.tv.wallpaper.Wallpapers
 import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.theme.LocalReducedMotion
+import app.orchard.tv.ui.theme.Glyph
+import app.orchard.tv.ui.theme.GlyphIcon
+import androidx.compose.foundation.layout.size
 import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Type
 import androidx.compose.runtime.snapshotFlow
@@ -206,6 +209,9 @@ fun HomeScreen(
     var inShelf by remember { mutableStateOf(false) }
     // Each app's selected card, so a shelf fading out keeps showing its own selection.
     val shelfIndexes = remember { mutableStateMapOf<String, Int>() }
+    // Each app's tab (a channel of its shelf); a card is remembered per tab.
+    val shelfTabs = remember { mutableStateMapOf<String, Int>() }
+    fun shelfKey(pkg: String) = "$pkg#${shelfTabs[pkg] ?: 0}"
     val focusedIndex = apps.indexOfFirst { it.key == focusedKey }
     val focusedRow = if (pillFocused || focusedIndex < 0) 0 else focusedIndex / COLUMNS
     val gridEnabled = overlay == Overlay.None
@@ -270,7 +276,10 @@ fun HomeScreen(
         val items = Shelf.load(shelfPkg)
         val next = items.takeIf { it.isNotEmpty() }?.let { ShelfContent(shelfPkg, it) }
         if (next != null) {
-            if (shelfPkg != lastShelfPkg) shelfIndexes[shelfPkg] = 0
+            if (shelfPkg != lastShelfPkg) {
+                shelfTabs[shelfPkg] = 0
+                shelfIndexes.keys.removeAll { it.startsWith("$shelfPkg#") }
+            }
             shelfContents[shelfPkg] = next
             shelfShown = shelfPkg
         }
@@ -281,9 +290,11 @@ fun HomeScreen(
     LaunchedEffect(apps.take(COLUMNS).map { it.packageName }, Shelf.version, AerialSettings.appContent) {
         if (AerialSettings.appContent) apps.take(COLUMNS).forEach { if (it.source == null && it.folder == null) Shelf.load(it.packageName) }
     }
-    val shelfIndex = shelf?.let { shelfIndexes[it.pkg] } ?: 0
+    // The shelf is shown only while focus is up on it; on its app's tile an arrow says it is there.
+    val shelfUp = shelf != null && inShelf
+    val shelfIndex = shelf?.let { shelfIndexes[shelfKey(it.pkg)] } ?: 0
     val shelfProgress by animateFloatAsState(
-        if (shelf != null) 1f else 0f,
+        if (shelfUp) 1f else 0f,
         // A whole-scene change: a little slower than focus, never bouncing.
         if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 140f),
         label = "shelf",
@@ -296,7 +307,10 @@ fun HomeScreen(
         }
     }
     // The backdrop follows the selected card, after the same kind of settle.
-    val shelfImage = shelf?.let { c -> c.items.getOrNull(shelfIndex)?.image ?: c.items.firstNotNullOfOrNull { it.image } }
+    val shelfImage = shelf?.takeIf { inShelf }?.let { c ->
+        val items = c.tabs[(shelfTabs[c.pkg] ?: 0).coerceIn(0, c.tabs.lastIndex)].items
+        items.getOrNull(shelfIndex)?.image ?: items.firstNotNullOfOrNull { it.image }
+    }
     var shelfBackdrop by remember { mutableStateOf<Pair<ImageBitmap, ImageBitmap>?>(null) }
     LaunchedEffect(shelfImage) {
         if (shelfImage == null) { shelfBackdrop = null; return@LaunchedEffect }
@@ -490,7 +504,7 @@ fun HomeScreen(
                 LiveWallpaper(
                     // An app's own content above the top row takes the scene from the film.
                     moving = vm.resumed && overlay == Overlay.None && !vm.screensaverVisible && !pastShelf &&
-                        focusedRow == 0 && moving == null && shelf == null,
+                        focusedRow == 0 && moving == null && !shelfUp,
                     keep = vm.resumed && (!vm.screensaverVisible || filmSaver),
                     lastInputAt = vm.lastInputAt,
                     cover = filmCover,
@@ -501,7 +515,7 @@ fun HomeScreen(
             }
             // The app's own picture while its shelf is up; else the chosen wallpaper, or in "Follow
             // App" mode light from the focused app.
-            val shelfPicture = shelfBackdrop.takeIf { shelf != null }
+            val shelfPicture = shelfBackdrop.takeIf { shelfUp }
             HomeBackground(
                 backdrop = shelfPicture?.first ?: Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
                 frosted = shelfPicture?.second ?: Wallpapers.frosted.takeIf { Wallpapers.backdrop != null },
@@ -553,7 +567,8 @@ fun HomeScreen(
                 }
 
                 shelfShown?.let { shownPkg ->
-                    if (shelfProgress > 0.001f) {
+                    // Composed while the app has a shelf, even closed, so Up has a row to focus.
+                    if (shelfProgress > 0.001f || shelf != null) {
                         Crossfade(
                             targetState = shownPkg,
                             animationSpec = tween(if (reduced) 0 else 280, easing = Motion.EaseOut),
@@ -569,7 +584,8 @@ fun HomeScreen(
                             val content = shelfContents.getValue(pkg)
                             ShelfRow(
                                 content = content,
-                                selected = shelfIndexes[pkg] ?: 0,
+                                tab = shelfTabs[pkg] ?: 0,
+                                selected = shelfIndexes[shelfKey(pkg)] ?: 0,
                                 active = inShelf && live,
                                 focusRequester = if (live) shelfRequester else remember { FocusRequester() },
                                 enabled = gridEnabled && live,
@@ -577,14 +593,43 @@ fun HomeScreen(
                                 screenWidth = screenW,
                                 cardHeight = metrics.shelfCardH,
                                 onFocusChange = { focused -> if (pkg == shelf?.pkg) inShelf = focused },
-                                onSelect = { shelfIndexes[pkg] = it },
+                                onTab = { shelfTabs[pkg] = it },
+                                onSelect = { shelfIndexes[shelfKey(pkg)] = it },
                                 onOpen = { item, bounds ->
                                     apps.firstOrNull { it.packageName == pkg }?.let { onOpenShelfItem(it, item, bounds) }
                                 },
                                 onExit = { focusedKey?.let { runCatching { requester(it).requestFocus() } } },
-                                onUp = { runCatching { pillRequester.requestFocus() } },
                             )
                         }
+                    }
+                }
+
+                // An arrow over the focused tile says its app has a shelf: Up opens it.
+                val arrowApp = apps.getOrNull(focusedIndex)?.takeIf {
+                    shelf != null && !inShelf && !pillFocused && moving == null && gridEnabled &&
+                        focusedIndex < COLUMNS && shelf?.pkg == it.packageName
+                }
+                val arrowIn by animateFloatAsState(
+                    if (arrowApp != null) 1f else 0f,
+                    if (reduced) snap() else tween(220, easing = Motion.EaseOut), label = "shelf-arrow",
+                )
+                if (arrowIn > 0.01f) {
+                    // Where the tile it was over stood, while it fades out.
+                    val at = remember { mutableStateOf(0) }
+                    if (arrowApp != null) at.value = focusedIndex
+                    val (ax, ay) = metrics.slot(at.value, onTop = true)
+                    Box(
+                        Modifier
+                            .offset(ax + metrics.tileW / 2 - 18.dp, ay - PlatePadV - 6.dp)
+                            .size(36.dp, PlatePadV + 6.dp)
+                            .graphicsLayer {
+                                alpha = arrowIn * scrolledAway(scroll.value, collapsePx)
+                                translationY = (1f - arrowIn) * 4.dp.toPx()
+                            }
+                            .pointerInput(Unit) { detectTapGestures { runCatching { shelfRequester.requestFocus() } } },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        GlyphIcon(Glyph.ChevronRight, Color.White.copy(alpha = 0.9f), 12.dp, Modifier.graphicsLayer { rotationZ = -90f })
                     }
                 }
 
@@ -664,6 +709,8 @@ fun HomeScreen(
                                     }
                                 },
                             rowEnd = index % COLUMNS == COLUMNS - 1 || index == apps.lastIndex,
+                            // Control Center is to the right of the top row: Up there belongs to the shelf.
+                            rowEndRight = pillRequester.takeIf { index < COLUMNS },
                             // On the glass plate only with every name shown (an earlier build showed
                             // the focused one alone there, but it sat oddly on the glass).
                             showName = plate == null || index >= COLUMNS || plateNames,
