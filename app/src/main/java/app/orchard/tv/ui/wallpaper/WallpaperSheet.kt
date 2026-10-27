@@ -65,6 +65,7 @@ import app.orchard.tv.settings.AppContentMode
 import app.orchard.tv.settings.NameMode
 import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.settings.UiSounds
+import app.orchard.tv.settings.Effects
 import app.orchard.tv.system.Sounds
 import app.orchard.tv.ui.components.Pressable
 import app.orchard.tv.ui.components.consumeTaps
@@ -79,13 +80,13 @@ import app.orchard.tv.wallpaper.PhoneServer
 import app.orchard.tv.wallpaper.AerialFormats
 import app.orchard.tv.wallpaper.AerialQuality
 import app.orchard.tv.wallpaper.ScreensaverMode
+import app.orchard.tv.system.SystemScreensaver
 import app.orchard.tv.wallpaper.Wallpaper
 import app.orchard.tv.wallpaper.WallpaperKind
 import app.orchard.tv.wallpaper.Wallpapers
 import app.orchard.tv.weather.Weather
 import app.orchard.tv.weather.WeatherKind
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -110,20 +111,16 @@ fun WallpaperSheet(
 
     BackHandler(enabled = visible, onBack = onDismiss)
 
-    // The phone page only listens while this sheet is up, plus a few minutes so an upload that is
-    // already under way can finish.
+    // The phone page listens all along (PhoneServer.listen); the address is read again each time,
+    // as the TV's may have changed.
     LaunchedEffect(visible) {
-        if (visible) {
-            val url = withContext(Dispatchers.IO) { PhoneServer.start(context) }
-            phoneUrl = url
-            qr = url?.let { withContext(Dispatchers.Default) { PhoneServer.qr(it).asImageBitmap() } }
-        } else {
-            delay(5 * 60 * 1000L)
-            withContext(Dispatchers.IO) { PhoneServer.stop() }
-        }
+        if (!visible) return@LaunchedEffect
+        val url = withContext(Dispatchers.IO) { PhoneServer.start(context) }
+        phoneUrl = url
+        qr = url?.let { withContext(Dispatchers.Default) { PhoneServer.qr(it).asImageBitmap() } }
     }
 
-    AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180)), modifier = Modifier.fillMaxSize()) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(220, easing = Motion.EaseOut)), exit = fadeOut(tween(180, easing = Motion.EaseOut)), modifier = Modifier.fillMaxSize()) {
         // A tap above the sheet closes it, back to Control Center as Back does.
         Box(Modifier.fillMaxSize().dismissOnTap(onDismiss).background(Color.Black.copy(alpha = 0.25f)))
     }
@@ -131,8 +128,8 @@ fun WallpaperSheet(
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(380, easing = Motion.Drawer)) { it / 3 },
-            exit = fadeOut(tween(160)) + slideOutVertically(tween(200, easing = Motion.EaseOut)) { it / 4 },
+            enter = fadeIn(tween(200, easing = Motion.EaseOut)) + slideInVertically(tween(380, easing = Motion.Drawer)) { it / 3 },
+            exit = fadeOut(tween(160, easing = Motion.EaseOut)) + slideOutVertically(tween(200, easing = Motion.EaseOut)) { it / 4 },
         ) {
             Row(
                 Modifier
@@ -155,6 +152,14 @@ fun WallpaperSheet(
                     Spacer(Modifier.height(16.dp))
                     SectionTitle(R.string.wp_wallpaper)
                     WallpaperRows()
+                    // Only for the owner's videos: whether keys stop them. The aerial films always move.
+                    if (Wallpapers.selectedId == Wallpapers.VIDEOS) Group { note ->
+                        Choices(
+                            R.string.st_play, stringResource(R.string.st_play_hint), note,
+                            listOf(false to R.string.st_play_still, true to R.string.st_play_always),
+                            AerialSettings.wallpaperAlwaysMoves, AerialSettings::chooseWallpaperAlwaysMoves, first = true,
+                        )
+                    }
 
                     Spacer(Modifier.height(6.dp))
                     SectionTitle(R.string.st_home_layout)
@@ -215,6 +220,11 @@ fun WallpaperSheet(
                             listOf(false to R.string.st_clock_small, true to R.string.st_clock_large),
                             AerialSettings.largeClock, AerialSettings::chooseLargeClock,
                         )
+                        Choices(
+                            R.string.wp_weather, null, note,
+                            listOf(true to R.string.st_on, false to R.string.st_off),
+                            AerialSettings.showWeather, AerialSettings::chooseShowWeather,
+                        )
                     }
                     Spacer(Modifier.height(10.dp))
                     Group { note ->
@@ -232,11 +242,15 @@ fun WallpaperSheet(
                             listOf(UiSounds.Tv to R.string.st_sounds_tv, UiSounds.Aerial to R.string.st_sounds_aerial, UiSounds.Off to R.string.st_off),
                             AerialSettings.uiSounds, { AerialSettings.chooseUiSounds(it); Sounds.prepare() },
                         )
-                        // Only Android 12 and later can blur live; the others have the frost only.
-                        if (Build.VERSION.SDK_INT >= 31) Choices(
-                            R.string.st_blur, stringResource(R.string.st_blur_hint), note,
-                            listOf(false to R.string.st_blur_frost, true to R.string.st_blur_live),
-                            AerialSettings.liveBlur, AerialSettings::chooseLiveBlur,
+                        Choices(
+                            R.string.st_effects,
+                            stringResource(
+                                if (AerialSettings.effects == Effects.Auto && AerialSettings.lowEnd) R.string.st_effects_auto_lite_hint
+                                else R.string.st_effects_hint,
+                            ),
+                            note,
+                            listOf(Effects.Auto to R.string.st_effects_auto, Effects.Full to R.string.st_effects_full, Effects.Lite to R.string.st_effects_lite),
+                            AerialSettings.effects, AerialSettings::chooseEffects,
                         )
                     }
 
@@ -246,6 +260,8 @@ fun WallpaperSheet(
                         SettingRow(
                             R.string.ss_kind,
                             when {
+                                Wallpapers.screensaver == ScreensaverMode.Videos -> stringResource(R.string.ss_videos_hint)
+                                Wallpapers.screensaver == ScreensaverMode.System -> stringResource(R.string.ss_system_hint)
                                 Wallpapers.screensaverFollows -> stringResource(R.string.ss_follow_hint)
                                 AerialSettings.backStartsScreensaver -> stringResource(R.string.ss_back_hint)
                                 else -> null
@@ -263,7 +279,26 @@ fun WallpaperSheet(
                                 AerialSettings.aerialQuality, AerialSettings::chooseAerialQuality,
                             )
                         }
-                        Choices(
+                        // The clock screensaver is its clock, and the others show none.
+                        if (Wallpapers.screensaver == ScreensaverMode.Aerial || Wallpapers.screensaver == ScreensaverMode.Photos) Choices(
+                            R.string.ss_show_time, stringResource(R.string.ss_show_time_hint), note,
+                            listOf(true to R.string.st_on, false to R.string.st_off),
+                            AerialSettings.screensaverClock, AerialSettings::chooseScreensaverClock,
+                        )
+                        // The firmware's screensaver starts on the firmware's timer: Aerial's delay
+                        // did nothing there, and Xiaomi's 1 minute came before the 5 chosen (issue #675).
+                        if (Wallpapers.screensaver == ScreensaverMode.System) SettingRow(R.string.ss_delay, null, note) {
+                            val delay = remember { SystemScreensaver.firmwareDelayMs(context) }
+                            BasicText(
+                                when {
+                                    delay == null -> stringResource(R.string.ss_delay_system)
+                                    delay == 0L -> stringResource(R.string.ss_delay_system_off)
+                                    else -> stringResource(R.string.ss_delay_system_minutes, ((delay + 30_000) / 60_000).coerceAtLeast(1).toInt())
+                                },
+                                style = Type.Body.copy(color = Palette.SecondaryLabel),
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        } else Choices(
                             R.string.ss_delay, null, note,
                             AerialSettings.screensaverChoices.map {
                                 it to if (it == AerialSettings.NEVER) stringResource(R.string.ss_never) else stringResource(R.string.ss_minutes, it)
@@ -319,7 +354,7 @@ private fun WallpaperRows() {
     val rotateTitle = stringResource(R.string.wp_photos_rotate)
     val list = remember(items, selected, dailyTitle, rotateTitle) {
         buildList {
-            addAll(items.filter { it.kind == WallpaperKind.Live })
+            addAll(items.filter { it.kind == WallpaperKind.Live || it.kind == WallpaperKind.Video })
             if (items.any { it.kind == WallpaperKind.Daily }) add(Wallpaper(Wallpapers.LATEST_DAILY, WallpaperKind.Daily, dailyTitle))
             addAll(items.filter { it.kind == WallpaperKind.Daily && it.id == selected })
             val photos = items.filter { it.kind == WallpaperKind.Photo }
@@ -328,6 +363,8 @@ private fun WallpaperRows() {
             addAll(photos)
             addAll(items.filter { it.kind == WallpaperKind.Builtin && (it.id in Wallpapers.FEATURED_BUILTINS || it.id == selected) })
             addAll(items.filter { it.kind == WallpaperKind.Auto })
+            // The inputs' pictures last: a choice for a home with a set-top box, not the usual one.
+            addAll(items.filter { it.kind == WallpaperKind.Source })
         }
     }
     var note by remember { mutableStateOf<String?>(null) }
@@ -352,6 +389,8 @@ private fun WallpaperRows() {
 @Composable
 private fun wallpaperNote(wp: Wallpaper): String? = when {
     wp.kind == WallpaperKind.Live -> stringResource(R.string.wp_live)
+    wp.kind == WallpaperKind.Video -> stringResource(R.string.wp_videos_note)
+    wp.kind == WallpaperKind.Source -> stringResource(R.string.wp_source_note)
     wp.id == Wallpapers.LATEST_DAILY -> stringResource(R.string.wp_daily_note)
     wp.id == Wallpapers.ROTATE_PHOTOS -> stringResource(R.string.wp_photos_rotate_note)
     wp.kind == WallpaperKind.Photo -> stringResource(R.string.wp_photo_note)
@@ -396,8 +435,12 @@ private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?, onFocu
                     ) { GlyphIcon(Glyph.Check, Palette.OnFocus, 13.dp) }
                 }
                 // The aerial wallpaper moves; its card shows the last frame it stopped on.
-                if (wp.kind == WallpaperKind.Live) {
+                if (wp.kind == WallpaperKind.Live || wp.kind == WallpaperKind.Video) {
                     GlyphIcon(Glyph.Play, Color.White, 22.dp, Modifier.align(Alignment.BottomStart).padding(7.dp))
+                }
+                // An input's picture cannot be copied for a card: its mark over the dark picture.
+                if (wp.kind == WallpaperKind.Source) {
+                    GlyphIcon(Glyph.Hdmi, Color.White, 34.dp, Modifier.align(Alignment.Center))
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -562,6 +605,8 @@ private fun ScreensaverChoice(onStart: () -> Unit) {
             ScreensaverMode.Aerial to R.string.ss_aerial,
             ScreensaverMode.Photos to R.string.ss_photos,
             ScreensaverMode.Clock to R.string.ss_clock,
+            ScreensaverMode.Videos to R.string.ss_videos,
+            ScreensaverMode.System to R.string.ss_system,
         ).forEach { (mode, label) ->
             Chip(stringResource(label), on = Wallpapers.screensaver == mode) { Wallpapers.chooseScreensaver(mode) }
         }
@@ -603,7 +648,8 @@ private fun PhoneCard(url: String?, qr: ImageBitmap?) {
         )
         if (url != null) {
             Spacer(Modifier.height(6.dp))
-            BasicText(url.removePrefix("http://").substringBefore('/') , style = Type.Caption.copy(color = Palette.TertiaryLabel))
+            // The whole address, token and all, to type into a computer's browser.
+            BasicText(url.removePrefix("http://"), style = Type.Caption.copy(color = Palette.SecondaryLabel))
         }
     }
 }

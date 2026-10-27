@@ -17,6 +17,10 @@
     <!-- Installing a new version from Control Center (update/Updates.kt). On TVs without the
          "install unknown apps" page (TCL) tools/install.sh allows it over ADB. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Some Android 5/6 TV firmwares deny even their app-specific external cache without these.
+         Requested at runtime on Android 6 only when the update directory is not writable (#592). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="23" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="23" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Both granted only over ADB by tools/install.sh, never requested in the app:
          - WRITE_SECURE_SETTINGS lets Aerial turn Home Guard back on after firmwares that
@@ -32,6 +36,10 @@
     <!-- Home's shelf: other apps' watch-next and preview-channel programs in the TV provider
          (shelf/Shelf.kt). Granted over ADB by tools/install.sh, never prompted. -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <!-- Which app is in front, where a launcher hides from accessibility (Xiaomi PatchWall on
+         Android 6, issue #81); granted over ADB. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <!-- RevivalSync: the sync adapter that restarts Aerial after a force-stop. -->
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
@@ -43,6 +51,24 @@
     <!-- A home screen lists every launchable app by definition. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Android 11 package visibility for the Skyworth/Coocaa source API: the TV's SDK provider
+         lists the ports and its TV activity opens one (SystemProbe.skyworthSources). -->
+    <queries>
+        <package android:name="com.skyworth.tv" />
+        <provider android:authorities="com.skyworth.tv.sdk.provider" />
+        <!-- SystemProbe.coocaaInputPanel: coocaaInputPanel asks whether Coocaa's Quick Panel
+             service exists; without this the Android 11 visibility filter hides it. -->
+        <package android:name="com.coocaa.os.ccosservice" />
+        <!-- SystemProbe.skyworthPicturePanel: on Skyworth/Coocaa TVs (75A7D) Control Center opens
+             the picture panel through SkySetting's exported HalfScreenService; without this the
+             Android 11 visibility filter hides the service. -->
+        <package android:name="com.skyworth.setting" />
+        <!-- SystemProbe.openInputPicker: older Coocaa firmware's own source dialog. -->
+        <intent>
+            <action android:name="coocaa.intent.action.SOURCE_DIALOG" />
+        </intent>
+    </queries>
 
     <!-- largeHeap: up to Android 7 bitmaps live on the Java heap, and LeTV X3-55 Pro (Android 5.0.1)
          ran out of it drawing Home (issue #328). -->
@@ -63,6 +89,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:directBootAware="true"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
             android:clearTaskOnLaunch="true"
