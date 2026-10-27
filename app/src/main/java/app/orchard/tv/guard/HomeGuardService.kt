@@ -272,13 +272,53 @@ class HomeGuardService : AccessibilityService() {
             if (SystemClock.uptimeMillis() - ownHomeAt < OWN_HOME_MS) return
             if (backOnPause) noteHomeInAerial()
             val front = lastWindow?.first
-            if (front != null && front !in stockHomes) return
+            if (front != null && front !in stockHomes) {
+                windowsAtHome = windowsSeen
+                handler.removeCallbacks(frontAfterHome)
+                handler.postDelayed(frontAfterHome, FRONT_AFTER_HOME_MS)
+                return
+            }
             // The stock launcher's window change usually comes first and already brought Aerial
             // back; starting it again redid Home's resume (MiTV-MFTR0: 0.2 s apart).
             if (SystemClock.uptimeMillis() - broughtBackAt < 1_000) return
             Log.i(TAG, "Home pressed with ${front ?: "an unknown app"} in front; bringing Aerial back")
             allowStockUntil = 0L
             goHome()
+        }
+    }
+
+    private var windowsSeen = 0L
+    private var windowsAtHome = 0L
+    private var deafAfterHomeRestarted = false
+
+    /**
+     * Home pressed in another app, and no window change since: the guard may have gone deaf. On
+     * Xiaomi Box 5 Max (MiTV-AZFU0, Android 14) it did after Xiaomi Weather or Mi Home had been
+     * open, and stayed so: the last window it had seen was the app's, so Home in it left PatchWall
+     * in front, and so did Home in every app after (issue #651). Usage stats still see PatchWall
+     * come to the front; then Aerial comes back, and accessibility is switched off and on once per
+     * process, which is what brought the events back there (Aerial started by hand did too).
+     */
+    private val frontAfterHome = Runnable {
+        // XGIMI (Android 9, m7642) answers Home with its own Home chooser when set-home-activity did
+        // not take; it was never drawn and the remote went dead over it (issue #44). Only right
+        // after Home: the same chooser also serves apps' "open with".
+        lastWindow?.takeIf { it.first == XGIMI_FRAMEWORK && it.second.endsWith(".resolver.ResolverActivity") }?.let {
+            Log.i(TAG, "Home pressed and XGIMI's Home chooser came up; bringing Aerial back")
+            goHome()
+            return@Runnable
+        }
+        if (windowsSeen != windowsAtHome) return@Runnable
+        val front = frontByUsage() ?: return@Runnable
+        if (front.first !in stockHomes) return@Runnable
+        Log.i(TAG, "Home pressed, no window change since, and usage stats say ${front.first} is in front; bringing Aerial back")
+        lastWindow = front
+        allowStockUntil = 0L
+        goHome()
+        if (!deafAfterHomeRestarted) {
+            deafAfterHomeRestarted = true
+            Log.i(TAG, "no window change for that; switching accessibility off and on")
+            GuardSetup.restartAccessibility(this)
         }
     }
 
@@ -789,6 +829,7 @@ class HomeGuardService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         sawEvent = true
+        windowsSeen++
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: return
@@ -1019,6 +1060,9 @@ class HomeGuardService : AccessibilityService() {
         private const val WAKE_WINDOW_MS = 15_000L
         private val BOOT_RECHECKS_MS = listOf(30_000L, 45_000L)
         private const val DEAF_AFTER_MS = 20_000L
+        /** How long a stock launcher's window change may take to arrive after Home (see frontAfterHome). */
+        private const val FRONT_AFTER_HOME_MS = 1_500L
+        private const val XGIMI_FRAMEWORK = "com.xgimi.xgimiframeworkui"
         private const val FOREGROUND_POLL_MS = 1_000L
         private const val FOREGROUND_LOOKBACK_MS = 10_000L
         /** How far back to look for the front when no window has been seen; see frontByUsage. */
@@ -1078,6 +1122,9 @@ class HomeGuardService : AccessibilityService() {
          * them for an app the viewer had opened. Panasonic DX01C (Skyworth-made, Tianci, Android 6)
          * starts this one from /system/pcfg's DEFAULT_HOMEPAGE, and it declares only the private
          * action com.skyworth.home.neo, which left it in front at power-on and on the Home key.
+         * E900V21F's LeJia is here for the other reason: it does declare CATEGORY_HOME, but the
+         * firmware keeps Home candidates out of a third-party caller's query, so that query does
+         * not return it either.
          */
         private val FIRMWARE_HOMES_WITHOUT_FILTER = mapOf(
             "com.skyworth.panasonichome" to listOf("com.skyworth.panasonichome.MainActivity"),
@@ -1088,6 +1135,13 @@ class HomeGuardService : AccessibilityService() {
             // What Tianci shows as its home, named only in persist.service.homepage.cls; the
             // package's HOME.CC is on MainActivity (Skyworth 7S70_A9, Android 8, issues #106 #461).
             "com.tianci.movieplatform" to listOf("com.coocaa.homepage.vast.HomePageActivity"),
+            // China Mobile "Mobile HD Box 6" 2024 (Skyworth E900V21F, S905L3S, Android 9): the
+            // firmware starts LeJia's DesktopActivity by component at power-on and on the Home
+            // key. It declares CATEGORY_HOME, but queryIntentActivities(HOME) from a third-party
+            // process returns nothing (the firmware filters Home candidates by signature), so
+            // resolve-activity stays on FallbackHome and set-home-activity rejects Aerial with
+            // "cannot be home". Verified on device; dumpsys and logs in the linked issue.
+            "com.mylejia.launcher" to listOf("com.mylejia.launcher.activity.DesktopActivity"),
         )
 
         /**

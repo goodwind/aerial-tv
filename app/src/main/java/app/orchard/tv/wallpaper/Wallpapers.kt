@@ -218,6 +218,14 @@ object Wallpapers {
     fun screensaverPicture(): Wallpaper? =
         if (screensaver != ScreensaverMode.Photos || moves() || isSource() || selectedId == AUTO) null else resolve()
 
+    /**
+     * The picture wallpaper an aerial screensaver starts over: Home carries it and the clock into
+     * the screensaver, and the film fades in over it once it moves (#683), rather than Home cutting
+     * to black while the film loads.
+     */
+    fun aerialSaverPicture(): Wallpaper? =
+        if (screensaver != ScreensaverMode.Aerial || moves() || isSource() || selectedId == AUTO) null else resolve()
+
     fun chooseScreensaver(mode: ScreensaverMode) {
         chosenScreensaver = mode
         prefs.edit { putString("screensaver", mode.key) }
@@ -663,9 +671,13 @@ object Wallpapers {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(tmp.path, bounds)
                 if (bounds.outWidth <= 0) return@withContext null
+                // Stored upright: the JPEG written below keeps no EXIF, so the turn is applied now.
+                val orientation = Images.exifOrientation(tmp)
+                val wide = if (Images.quarterTurn(orientation)) bounds.outHeight else bounds.outWidth
                 var sample = 1
-                while (bounds.outWidth / (sample * 2) >= 2560) sample *= 2
-                val bmp = BitmapFactory.decodeFile(tmp.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return@withContext null
+                while (wide / (sample * 2) >= 2560) sample *= 2
+                val decoded = BitmapFactory.decodeFile(tmp.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return@withContext null
+                val bmp = Images.upright(decoded, orientation)
                 val name = System.currentTimeMillis().toString(36)
                 File(photoDir, "$name.jpg").outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
                 bmp.recycle()
