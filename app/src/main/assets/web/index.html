@@ -296,6 +296,17 @@
   <div class="hero" id="hero"><img id="heroImg" alt=""><div class="cap"><small data-i18n="current_wp"></small><b id="heroTitle"></b></div></div>
   <div id="sections"></div>
 
+  <h2>Unsplash</h2>
+  <p class="foot" data-i18n="unsplash_how"></p>
+  <div class="list">
+    <form class="item field" id="unsplashForm">
+      <input id="unsplashKey" type="password" data-i18n-placeholder="unsplash_ph" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="link" id="unsplashBtn" data-i18n="unsplash_save"></button>
+    </form>
+  </div>
+  <p class="foot"><a href="https://unsplash.com/developers" target="_blank" rel="noopener">unsplash.com/developers</a></p>
+  <p class="foot" id="unsplashHint"></p>
+
   <h2 class="big" data-i18n="screensaver"></h2>
   <div class="list" id="ss" role="radiogroup" data-i18n-aria-label="screensaver_short">
     <button class="item" role="radio" data-mode="aerial"><span class="txt"><span data-i18n="ss_aerial"></span><span class="sub" data-i18n="hint_aerial"></span></span><svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
@@ -380,7 +391,7 @@ let state = null, stateJson = '';
 
 // The language: ?lang=ru in the address, else the one picked under More (kept on the phone), else the
 // first of the phone's preferred languages that has a table, else English. Keys are in KEYS, one array of texts per language.
-const KEYS = ["screensaver", "screensaver_short", "ss_aerial", "ss_photos", "ss_clock", "focus", "focus_high", "focus_standard", "weather", "city_ph", "set", "upload_label", "feedback_h", "feedback_hint", "diag_show", "diag_copy", "diag_github", "hint_aerial", "hint_photos", "hint_clock", "g_live", "g_live_sub", "g_daily", "g_daily_sub", "g_photo", "g_builtin", "g_auto", "toast_wallpaper", "aria_delete", "confirm_delete", "wx_clear", "wx_partlycloudy", "wx_cloudy", "wx_fog", "wx_rain", "wx_snow", "wx_thunder", "wx_chosen", "wx_auto_btn", "toast_auto", "wx_guessed", "wx_none", "tag_source", "aria_rename", "toast_renamed", "toast_name_reset", "toast_rename_fail", "aria_reset_icon", "toast_icon_reset", "focus_hint_standard", "focus_hint_high", "daily_title", "daily_caption", "rotate_title", "rotate_caption", "empty_photos", "add_second", "toast_tv_updated", "sending_n", "toast_added", "toast_no_photos", "toast_send_fail", "toast_city_set", "toast_city_nf", "toast_set_fail", "toast_sending_icon", "toast_icon_set", "toast_icon_bad", "diag_collecting", "toast_diag_fail", "toast_copied", "toast_copy_manual", "language", "hint_follows", "ss_videos", "hint_videos", "videos_h", "videos_upload", "videos_hint", "videos_empty", "confirm_video_delete", "toast_videos_added", "toast_video_bad", "sending_video", "hint_system", "tab_home", "tab_more", "current_wp", "cancel", "save", "name_ph", "rename_hint", "change_icon", "this_tv", "folder_count", "folder_ph", "inputs_h", "inputs_hint", "rename_hint_app", "was_named", "arrange_hint", "arrange_unready", "hidden_h", "hidden_none", "hidden_locked", "show_app", "hide_app", "to_folder", "new_folder", "out_of_folder", "ungroup", "ungroup_confirm", "folder_hint", "toast_hidden", "toast_shown", "toast_in_folder", "toast_out_folder", "toast_ungrouped", "tab_looks", "looks_title", "show_on_home", "source_device", "source_plain", "source_device_hint", "tv_model", "sw_always", "sw_always_sub", "sw_weather", "sw_saver_time", "sw_saver_time_sub", "g_source_sub", "icon_h", "icon_library", "icon_own", "icon_custom", "toast_icon_picked", "drop_hint", "drop_sub", "drop_none", "toast_diag_paste"];
+const KEYS = ["screensaver", "screensaver_short", "ss_aerial", "ss_photos", "ss_clock", "focus", "focus_high", "focus_standard", "weather", "city_ph", "set", "upload_label", "feedback_h", "feedback_hint", "diag_show", "diag_copy", "diag_github", "hint_aerial", "hint_photos", "hint_clock", "g_live", "g_live_sub", "g_daily", "g_daily_sub", "g_photo", "g_builtin", "g_auto", "toast_wallpaper", "aria_delete", "confirm_delete", "wx_clear", "wx_partlycloudy", "wx_cloudy", "wx_fog", "wx_rain", "wx_snow", "wx_thunder", "wx_chosen", "wx_auto_btn", "toast_auto", "wx_guessed", "wx_none", "tag_source", "aria_rename", "toast_renamed", "toast_name_reset", "toast_rename_fail", "aria_reset_icon", "toast_icon_reset", "focus_hint_standard", "focus_hint_high", "daily_title", "daily_caption", "rotate_title", "rotate_caption", "empty_photos", "add_second", "toast_tv_updated", "sending_n", "toast_added", "toast_no_photos", "toast_send_fail", "toast_city_set", "toast_city_nf", "toast_set_fail", "toast_sending_icon", "toast_icon_set", "toast_icon_bad", "diag_collecting", "toast_diag_fail", "toast_copied", "toast_copy_manual", "language", "hint_follows", "ss_videos", "hint_videos", "videos_h", "videos_upload", "videos_hint", "videos_empty", "confirm_video_delete", "toast_videos_added", "toast_video_bad", "sending_video", "hint_system", "tab_home", "tab_more", "current_wp", "cancel", "save", "name_ph", "rename_hint", "change_icon", "this_tv", "folder_count", "folder_ph", "inputs_h", "inputs_hint", "rename_hint_app", "was_named", "arrange_hint", "arrange_unready", "hidden_h", "hidden_none", "hidden_locked", "show_app", "hide_app", "to_folder", "new_folder", "out_of_folder", "ungroup", "ungroup_confirm", "folder_hint", "toast_hidden", "toast_shown", "toast_in_folder", "toast_out_folder", "toast_ungrouped", "tab_looks", "looks_title", "show_on_home", "source_device", "source_plain", "source_device_hint", "tv_model", "sw_always", "sw_always_sub", "sw_weather", "sw_saver_time", "sw_saver_time_sub", "g_source_sub", "icon_h", "icon_library", "icon_own", "icon_custom", "toast_icon_picked", "drop_hint", "drop_sub", "drop_none", "toast_diag_paste", "unsplash_how", "unsplash_ph", "unsplash_save", "unsplash_hint_set", "unsplash_hint_none", "unsplash_bad", "unsplash_unverified", "unsplash_saved", "unsplash_cleared"];
 const TEXTS = {
  "zh": [
   "屏幕保护程序",
@@ -522,7 +533,16 @@ const TEXTS = {
   "松开即可发送到电视",
   "照片用作壁纸，视频加入屏保",
   "只能发送照片和视频（MP4、MOV）",
-  "诊断信息已复制。在 GitHub 打开的页面里，把它粘贴到「诊断信息」一栏。"
+  "诊断信息已复制。在 GitHub 打开的页面里，把它粘贴到「诊断信息」一栏。",
+  "自动轮换也可以用 Unsplash，需要你自己的免费密钥：在下面的链接注册，创建一个应用（免费的 Demo 级别就够），把它的 Access Key 粘贴到这里。",
+  "粘贴 Access Key",
+  "保存",
+  "密钥已保存，Unsplash 已确认。到电视「个性化 · 自动轮换」里打开 Unsplash 来源。留空并点保存可删除密钥。",
+  "还没有密钥，所以自动轮换里的 Unsplash 保持关闭，直到保存一个有效的密钥。",
+  "Unsplash 不认这个密钥，请检查",
+  "没能向 Unsplash 验证这个密钥（电视联网了吗？），请重试",
+  "密钥已保存",
+  "密钥已清除"
  ],
  "en": [
   "Screensaver",
@@ -664,7 +684,16 @@ const TEXTS = {
   "Drop to send to the TV",
   "Photos become wallpapers, videos join the screensaver",
   "Only photos and videos (MP4, MOV) can be sent",
-  "Diagnostics copied. On the GitHub page that opens, paste them into Diagnostics."
+  "Diagnostics copied. On the GitHub page that opens, paste them into Diagnostics.",
+  "Auto Wallpapers can also use Unsplash, with your own free key: sign up at the link below, create an application (the free Demo level is enough) and paste its Access Key here.",
+  "Paste the Access Key",
+  "Save",
+  "Key saved and accepted by Unsplash. Turn the source on in Personalize on the TV. Leave the field empty and press Save to remove the key.",
+  "No key yet, so Unsplash stays off in Auto Wallpapers until a valid one is saved.",
+  "Unsplash did not accept this key, please check it",
+  "Could not check the key with Unsplash (is the TV online?). Try again.",
+  "Key saved",
+  "Key cleared"
  ],
  "ru": [
   "Заставка",
@@ -806,7 +835,16 @@ const TEXTS = {
   "Отпустите, чтобы отправить на телевизор",
   "Фото станут обоями, видео — заставкой",
   "Можно отправлять только фото и видео (MP4, MOV)",
-  "Диагностика скопирована. На открывшейся странице GitHub вставьте её в поле «Диагностика»."
+  "Диагностика скопирована. На открывшейся странице GitHub вставьте её в поле «Диагностика».",
+  "«Авто-обои» могут брать картинки и с Unsplash, нужен ваш бесплатный ключ: зарегистрируйтесь по ссылке ниже, создайте приложение (хватит бесплатного уровня Demo) и вставьте сюда его Access Key.",
+  "Вставьте Access Key",
+  "Сохранить",
+  "Ключ сохранён, Unsplash его принял. Включите источник в «Персонализации» на ТВ. Оставьте поле пустым и нажмите «Сохранить», чтобы удалить ключ.",
+  "Ключа пока нет, поэтому Unsplash в «Авто-обоях» выключен, пока не сохранён действующий ключ.",
+  "Unsplash не принял этот ключ, проверьте",
+  "Не удалось проверить ключ в Unsplash (ТВ в сети?). Попробуйте ещё раз.",
+  "Ключ сохранён",
+  "Ключ удалён"
  ],
  "uk": [
   "Заставка",
@@ -948,7 +986,16 @@ const TEXTS = {
   "Відпустіть, щоб надіслати на телевізор",
   "Фото стануть шпалерами, відео — заставкою",
   "Можна надсилати лише фото й відео (MP4, MOV)",
-  "Діагностику скопійовано. На сторінці GitHub, що відкриється, вставте її в поле «Діагностика»."
+  "Діагностику скопійовано. На сторінці GitHub, що відкриється, вставте її в поле «Діагностика».",
+  "«Авто-шпалери» можуть брати зображення й з Unsplash, потрібен ваш безкоштовний ключ: зареєструйтеся за посиланням нижче, створіть застосунок (досить безкоштовного рівня Demo) і вставте сюди його Access Key.",
+  "Вставте Access Key",
+  "Зберегти",
+  "Ключ збережено, Unsplash його прийняв. Увімкніть джерело в «Персоналізації» на ТВ. Залиште поле порожнім і натисніть «Зберегти», щоб видалити ключ.",
+  "Ключа поки немає, тому Unsplash в «Авто-шпалерах» вимкнений, доки не збережено дійсний ключ.",
+  "Unsplash не прийняв цей ключ, перевірте",
+  "Не вдалося перевірити ключ в Unsplash (ТВ у мережі?). Спробуйте ще раз.",
+  "Ключ збережено",
+  "Ключ видалено"
  ],
  "kk": [
   "Экран қорғаушы",
@@ -1090,7 +1137,16 @@ const TEXTS = {
   "Теледидарға жіберу үшін босатыңыз",
   "Фотолар түсқағаз, бейнелер скринсейвер болады",
   "Тек фото мен бейне (MP4, MOV) жіберуге болады",
-  "Диагностика көшірілді. Ашылған GitHub бетінде оны «Диагностика» өрісіне қойыңыз."
+  "Диагностика көшірілді. Ашылған GitHub бетінде оны «Диагностика» өрісіне қойыңыз.",
+  "«Авто-тұсқағаздар» Unsplash-тан да сурет ала алады, ол үшін өз тегін кілтіңіз керек: төмендегі сілтеме бойынша тіркеліп, қолданба жасаңыз (тегін Demo деңгейі жеткілікті) және оның Access Key кілтін осында қойыңыз.",
+  "Access Key кілтін қойыңыз",
+  "Сақтау",
+  "Кілт сақталды, Unsplash оны қабылдады. Көзді теледидардағы «Жекелендіру» ішінде қосыңыз. Кілтті жою үшін өрісті бос қалдырып, «Сақтау» түймесін басыңыз.",
+  "Кілт әзірге жоқ, сондықтан «Авто-тұсқағаздардағы» Unsplash жарамды кілт сақталғанша өшірулі тұрады.",
+  "Unsplash бұл кілтті қабылдамады, тексеріңіз",
+  "Кілтті Unsplash-та тексеру мүмкін болмады (теледидар желіде ме?). Қайталап көріңіз.",
+  "Кілт сақталды",
+  "Кілт жойылды"
  ]
 };
 const LANGS = Object.keys(TEXTS);
@@ -1256,7 +1312,6 @@ function action(list, text, cls, fn) {
 /* Wallpaper tab. */
 function titleOf(id) {
   if (id === state.latestDaily) return t('daily_title');
-  if (id === state.rotatePhotos) return t('rotate_title');
   const w = state.wallpapers.find(w => w.id === id);
   return w ? w.title : '';
 }
@@ -1290,6 +1345,7 @@ function card(w) {
   return b;
 }
 function renderWallpapers() {
+  $('#unsplashHint').textContent = state.unsplash ? t('unsplash_hint_set') : t('unsplash_hint_none');
   $('#heroImg').src = `${base}thumb/${encodeURIComponent(state.selected)}`;
   $('#heroTitle').textContent = titleOf(state.selected);
   const root = $('#sections'); root.replaceChildren();
@@ -1299,8 +1355,6 @@ function renderWallpapers() {
     // Each video on its own; the card that plays them in turn only for two or more (#762), as on the TV.
     if (kind === 'live' && list.filter(w => w.kind === 'video').length < 3 && state.selected !== 'videos:mine') list = list.filter(w => w.id !== 'videos:mine');
     if (kind === 'daily' && list.length) list = [{ id: state.latestDaily, kind: 'daily', title: t('daily_title'), caption: t('daily_caption') }, ...list];
-    // Two or more photos: one a day, as on the TV (#27, #194).
-    if (kind === 'photo' && list.length > 1) list = [{ id: state.rotatePhotos, kind: 'photos', title: t('rotate_title'), caption: t('rotate_caption') }, ...list];
     if (!list.length && kind !== 'photo') continue;
     root.appendChild(el('h2', 'big', title));
     if (kind === 'photo') {
@@ -1473,6 +1527,19 @@ $('#cityForm').onsubmit = async e => {
     if (next.found) $('#city').value = '';
   } catch (err) { toast(t('toast_set_fail')); }
   btn.disabled = !$('#city').value.trim();
+};
+
+$('#unsplashForm').onsubmit = async e => {
+  e.preventDefault();
+  const key = $('#unsplashKey').value.trim();
+  if (!key && !state.unsplash) return;
+  const btn = $('#unsplashBtn'); btn.disabled = true;
+  try {
+    const next = await api('api/unsplash', { key }); take(next);
+    if (!next.ok) toast(t(next.reason === 'unverified' ? 'unsplash_unverified' : 'unsplash_bad'));
+    else { toast(key ? t('unsplash_saved') : t('unsplash_cleared')); $('#unsplashKey').value = ''; }
+  } catch (err) { toast(t('toast_set_fail')); }
+  btn.disabled = false;
 };
 
 let iconFor = null;
