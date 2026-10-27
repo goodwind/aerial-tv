@@ -3,38 +3,48 @@
 `main` here is upstream's `main` plus our branches, built as one app that updates itself from this
 repository's releases. It is meant to be brought up to upstream again and again.
 
-## What is on top of upstream
+## How the fork is laid out
+
+`main` here is a plain mirror of upstream's `main`. Every change lives in its own feature branch off
+it, and the app is built from a throwaway branch `build` that merges them all.
 
 | Branch | What | Where it stands |
 |---|---|---|
+| `fork-layer` | updates come from this repo's releases, `tools/fork-stamp.py`, this file | fork only |
 | `thin-focus-ring` | thinner high-contrast ring on the tiles | PR #352 |
 | `app-info-for-firmware-without-it` | read-only App Info for firmware without one (already inside `app-info-adb`) | PR #233 |
 | `app-info-adb` | adbd access for App Info, off until the owner agrees, revoked by turning it off | PR #356 (stacked on #233) |
 | `app-content-shelf` | app content shelf (Slides Out / Off / Always), tabs, asks apps to publish, big app name | PR #364 |
-| `auto-wallpapers-pr` | auto wallpapers (Bing, Wikimedia, NASA, Unsplash, own photos) | **not taken upstream** (#353 closed): kept only here |
-
-On top of those, `tools/fork-stamp.py` makes it this fork's own build (below).
+| `personalization-tabs` | Personalize in pages: Home Screen, Wallpaper, Screensaver, System | PR #748 |
+| `auto-wallpapers` | auto wallpapers (Bing, Wikimedia, NASA, Unsplash, own photos) | **not taken upstream** (#353 closed): fork only |
 
 ## Bringing the fork up to upstream
 
+`git config rerere.enabled true` once: conflicts between the branches (the Personalize sheet is
+touched by four of them) are settled by hand the first time and remembered after that.
+
 ```sh
 git fetch origin fork
-# 1. each branch takes upstream's main: merge, fix conflicts, build; push (never rebase: upstream's
-#    maintainer also pushes to the PR branches)
-for b in thin-focus-ring app-info-adb app-content-shelf auto-wallpapers-pr; do
-  git checkout $b && git merge origin/main      # then fix, ./gradlew testStandardDebugUnitTest assembleStandardRelease, git push fork $b
+git checkout main && git merge --ff-only origin/main && git push fork main
+# 1. a branch with an open PR takes upstream's main by merge (the maintainer also pushes to those
+#    branches, so never rebase them); fork-only branches (fork-layer, auto-wallpapers) are rebased
+for b in thin-focus-ring app-info-adb app-content-shelf personalization-tabs; do
+  git checkout $b && git merge origin/main        # fix, push fork $b
 done
-# 2. main takes upstream and all the branches
-git checkout main && git merge origin/main
-for b in thin-focus-ring app-info-adb app-content-shelf auto-wallpapers-pr; do git merge $b; done
-python3 tools/fork-stamp.py 1                   # N = the fork's build of this upstream version; 2 for a second one
+for b in fork-layer auto-wallpapers; do git checkout $b && git rebase origin/main; done   # push --force-with-lease
+# 2. build: a new branch off upstream with all of them
+git checkout -b build origin/main
+for b in fork-layer thin-focus-ring app-info-adb app-content-shelf personalization-tabs auto-wallpapers; do git merge $b; done
+python3 tools/fork-stamp.py 1                     # N = the fork's build of this upstream version
 ./gradlew testStandardDebugUnitTest assembleStandardRelease assembleGuardRelease
 ```
 
-Conflicts that came up every time, and how they were settled: the strings files (keep both sides,
-drop repeated keys), the `Glyph` list (union), `HomeScreen.kt` (upstream moves it a lot; keep its
-version and put the shelf's lines back in), `AerialSettings.kt` (both sides add settings). After
-merging, check that `values-ru`, `-uk`, `-kk` and `-zh` have every key of `values` and nothing more.
+Release from `build`; delete it afterwards (`git branch -D build`), the next one starts again from
+upstream. Conflicts that came up every time: the strings files (keep both sides, drop repeated
+keys), the `Glyph` list (union), `HomeScreen.kt` (keep upstream's version and put the shelf's lines
+back in), `AerialSettings.kt` (both sides add settings), the Personalize sheet (`WallpaperSheet.kt`:
+each branch's rows go on the page they belong to; App permissions on System). After merging, check
+that `values-ru`, `-uk`, `-kk` and `-zh` have every key of `values` and nothing more.
 
 ## Versions
 
