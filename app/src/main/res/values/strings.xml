@@ -163,7 +163,7 @@
     <string name="st_app_content_off">Off</string>
     <string name="st_app_content_hint">An app that offers continue watching or its own picks shows a small arrow over its tile in the top row. Press Up for them, with a tab for each channel. Always shows them by itself as soon as you move to the app. Apps that offer none are left as they are.</string>
     <string name="st_app_content_always">Always</string>
-    <string name="st_app_content_bg">Backdrop</string>
+    <string name="st_app_content_bg">Content shelf backdrop</string>
     <string name="st_app_content_bg_hint">Behind the open shelf: the wallpaper frosted, or the selected card\'s poster, which loads from the app as you move along the cards.</string>
     <string name="st_app_content_bg_blur">Frosted wallpaper</string>
     <string name="st_app_content_bg_posters">Posters</string>
