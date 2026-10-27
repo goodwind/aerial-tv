@@ -240,6 +240,9 @@ fun HomeBackground(
     glassAwaitsStop: Boolean = false,
     /** The grid's own glass, where it is not the picture's ([frosted]): the aerial film's (Wallpapers.clipGlass). */
     gridGlass: ImageBitmap? = null,
+    /** The shelf's poster, over the wallpaper and faded out towards the panel (ShelfPoster), [shelfShow] of the way in. */
+    shelfPoster: ImageBitmap? = null,
+    shelfShow: () -> Float = { 0f },
 ) {
     Box(Modifier.fillMaxSize()) {
         // Over a paused film, under the pictures: the shading its picture will have. The picture
@@ -252,6 +255,7 @@ fun HomeBackground(
             drawRect(Brush.horizontalGradient(0f to Color.Black.copy(alpha = Images.SHADE_LEFT), 1f to Color.Transparent, endX = size.width / 2), alpha = stopped)
         }
         Pictures(backdrop, gridGlass ?: frosted, filmGlass.takeIf { glassAwaitsStop }, wallpaper, scroll, collapse, cover, filmStopped, toSaver)
+        ShelfPoster(shelfPoster, shelfShow)
         if (saverImage != null) Canvas(Modifier.fillMaxSize()) {
             val a = saverReveal()
             if (a > 0.01f) drawDrawingIn(saverImage, saverPush(), a)
