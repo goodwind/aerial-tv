@@ -9,8 +9,8 @@ import kotlin.math.roundToInt
  */
 object ShelfFade {
     /** From where (fraction of the height) the poster starts to fade, and where it is gone. */
-    const val FROM = 0.45f
-    const val TO = 0.72f
+    const val FROM = 0.60f
+    const val TO = 1.0f
 
     /** How much of the poster is left at [at] (0 top, 1 bottom): a smooth fall between [from] and [to]. */
     fun alpha(at: Float, from: Float = FROM, to: Float = TO): Float {
