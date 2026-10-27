@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import app.orchard.tv.apps.TileSheet
 import app.orchard.tv.settings.AerialSettings
+import app.orchard.tv.settings.AppContentMode
 import app.orchard.tv.settings.NameMode
 import app.orchard.tv.system.DeviceProfile
 import app.orchard.tv.system.DiagLog
@@ -25,6 +26,8 @@ import kotlinx.coroutines.launch
  *   ... --ez large_clock true --ez clock_right false --ez one_row_home true
  *       --ez peek_next_row false --ez home_plate true --ez show_all_names false
  *                                   (Home's layout, as in Personalize; for screenshots of each)
+ *   ... --es app_content_mode up|off|always   (App Content in Personalize: Slides Out, Off, Always;
+ *                                   for trying each, or measuring one)
  *   ... --ez check_update true      (look for a new version now, not within three hours)
  *   ... --ez update_test true       ("Download and Install" takes files/update-test.apk instead,
  *                                   until Aerial restarts; for trying an update before a release)
@@ -97,6 +100,12 @@ class ConfigReceiver : BroadcastReceiver() {
         if (layout.isNotEmpty()) {
             AerialSettings.init(context)
             layout.forEach { (key, choose) -> choose(intent.getBooleanExtra(key, false)) }
+        }
+        intent.getStringExtra("app_content_mode")?.let { key ->
+            AppContentMode.entries.firstOrNull { it.key == key }?.let {
+                AerialSettings.init(context)
+                AerialSettings.chooseAppContentMode(it)
+            }
         }
         // ... --ez diag true / --ez mode_switch false / --ez soft_layer true   (see DiagLog;
         //                                 the last two apply the next time Home starts)

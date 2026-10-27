@@ -827,32 +827,15 @@ fun HomeScreen(
                         AerialSettings.appContentMode != AppContentMode.Always &&
                         focusedIndex < COLUMNS && shelf?.pkg == it.packageName
                 }
-                val arrowIn by animateFloatAsState(
-                    if (arrowApp != null) 1f else 0f,
-                    // A little overshoot: it arrives with a nudge upward, the way Up goes.
-                    if (reduced) snap() else spring(dampingRatio = 0.5f, stiffness = 320f), label = "shelf-arrow",
+                ShelfArrow(
+                    show = arrowApp != null,
+                    index = focusedIndex,
+                    slot = { metrics.slot(it, onTop = true) },
+                    tileW = metrics.tileW,
+                    plateV = PlatePadV,
+                    fade = { scrolledAway(scroll.value, collapsePx) },
+                    onTap = { runCatching { shelfRequester.requestFocus() } },
                 )
-                if (arrowIn > 0.01f) {
-                    // Where the tile it was over stood, while it fades out.
-                    val at = remember { mutableStateOf(0) }
-                    if (arrowApp != null) at.value = focusedIndex
-                    val (ax, ay) = metrics.slot(at.value, onTop = true)
-                    Box(
-                        Modifier
-                            .offset(ax + metrics.tileW / 2 - 22.dp, ay - PlatePadV - 10.dp)
-                            .size(44.dp, PlatePadV + 10.dp)
-                            .graphicsLayer {
-                                alpha = arrowIn.coerceIn(0f, 1f) * scrolledAway(scroll.value, collapsePx)
-                                translationY = (1f - arrowIn) * 8.dp.toPx()
-                            }
-                            .pointerInput(Unit) { detectTapGestures { runCatching { shelfRequester.requestFocus() } } },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // Dark under white, so it reads over a bright wallpaper as well as a dark one.
-                        GlyphIcon(Glyph.ChevronRight, Color.Black.copy(alpha = 0.35f), 20.dp, Modifier.offset(y = 1.dp).graphicsLayer { rotationZ = -90f })
-                        GlyphIcon(Glyph.ChevronRight, Color.White, 20.dp, Modifier.graphicsLayer { rotationZ = -90f })
-                    }
-                }
 
                 // In one row with no peek, the rows below stay out of sight until Home scrolls to them.
                 val hideBelow = oneRow && !peek

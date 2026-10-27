@@ -75,6 +75,8 @@ import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.ui.components.focusRing
 import app.orchard.tv.ui.components.isSelect
 import app.orchard.tv.ui.theme.LocalReducedMotion
+import app.orchard.tv.ui.theme.Glyph
+import app.orchard.tv.ui.theme.GlyphIcon
 import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Palette
 import app.orchard.tv.ui.theme.Type
@@ -441,4 +443,51 @@ private fun shelfMeta(item: ShelfItem): String? {
         },
     )
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+
+/**
+ * The arrow over the tile of an app with a shelf: Up opens it. The animation is read in the layer
+ * only, never in composition: read in Home's own body, every frame of its spring recomposed the whole
+ * screen (on a MiTV-MFTR0 that was about a second of full frames for each app with content passed on
+ * the top row, and 15-20% of the frames janky).
+ */
+@Composable
+fun ShelfArrow(
+    show: Boolean,
+    /** The tile it is over. */
+    index: Int,
+    slot: (Int) -> Pair<Dp, Dp>,
+    tileW: Dp,
+    plateV: Dp,
+    /** 0 to 1: gone as the grid scrolls up. */
+    fade: () -> Float,
+    onTap: () -> Unit,
+) {
+    val reduced = LocalReducedMotion.current
+    val arrowIn = animateFloatAsState(
+        if (show) 1f else 0f,
+        // A little overshoot: it arrives with a nudge upward, the way Up goes.
+        if (reduced) snap() else spring(dampingRatio = 0.5f, stiffness = 320f), label = "shelf-arrow",
+    )
+    // Where the tile it was over stood, while it fades out.
+    val at = remember { intArrayOf(0) }
+    if (show) at[0] = index
+    val (ax, ay) = slot(at[0])
+    Box(
+        Modifier
+            .offset(ax + tileW / 2 - 22.dp, ay - plateV - 10.dp)
+            .size(44.dp, plateV + 10.dp)
+            .graphicsLayer {
+                val v = arrowIn.value
+                alpha = v.coerceIn(0f, 1f) * fade()
+                translationY = (1f - v) * 8.dp.toPx()
+            }
+            .pointerInput(Unit) { detectTapGestures { if (arrowIn.value > 0.5f) onTap() } },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Dark under white, so it reads over a bright wallpaper as well as a dark one.
+        GlyphIcon(Glyph.ChevronRight, Color.Black.copy(alpha = 0.35f), 20.dp, Modifier.offset(y = 1.dp).graphicsLayer { rotationZ = -90f })
+        GlyphIcon(Glyph.ChevronRight, Color.White, 20.dp, Modifier.graphicsLayer { rotationZ = -90f })
+    }
 }
