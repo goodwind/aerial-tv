@@ -41,7 +41,9 @@ import java.net.URL
 object Updates {
     private const val TAG = "AerialUpdates"
     private const val PREFS = "updates"
-    private const val VERSION_URL = "https://aerial.qust.me/download/version.txt"
+    /** This fork's releases (goodwind/aerial-tv): each carries version.txt and the APKs, see docs/FORK.md. */
+    const val RELEASES_URL = "https://github.com/goodwind/aerial-tv/releases/latest"
+    private const val VERSION_URL = "$RELEASES_URL/download/version.txt"
     private const val CHECK_EVERY_MS = 3 * 60 * 60 * 1000L
     private const val RETRY_MS = 10 * 60 * 1000L
 
@@ -240,10 +242,7 @@ object Updates {
             return verify(context, file)
         }
         val name = "aerial-${BuildConfig.FLAVOR}.apk"
-        val sources = listOf(
-            "https://aerial.qust.me/download/$name",
-            "https://github.com/pengchujin/aerial-tv/releases/latest/download/$name",
-        )
+        val sources = listOf("$RELEASES_URL/download/$name")
         for (url in sources) {
             val ok = runCatching { download(url, file) }
                 .onFailure { Log.w(TAG, "could not download $url", it) }
