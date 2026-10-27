@@ -231,6 +231,10 @@
     <string name="st_app_content_off">Выкл.</string>
     <string name="st_app_content_hint">У приложения с «Продолжить просмотр» или своими подборками над плиткой в первом ряду появляется стрелка. Нажмите «вверх», чтобы увидеть их, у каждого канала своя вкладка. «Всегда» показывает их сама, как только вы перешли к приложению. Остальные приложения остаются как есть.</string>
     <string name="st_app_content_always">Всегда</string>
+    <string name="st_app_content_bg">Фон</string>
+    <string name="st_app_content_bg_hint">За открытой полкой: размытые обои или постер выбранной карточки (он подгружается из приложения, пока вы листаете карточки).</string>
+    <string name="st_app_content_bg_blur">Размытые обои</string>
+    <string name="st_app_content_bg_posters">Постеры</string>
     <string name="tile_stock_home">Главный экран ТВ</string>
     <string name="tile_kids">Детям</string>
     <string name="info_version">Версия %1$s (%2$d)</string>

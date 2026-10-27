@@ -231,6 +231,10 @@
     <string name="st_app_content_off">Вимк.</string>
     <string name="st_app_content_hint">У застосунку з «Продовжити перегляд» або власними добірками над плиткою в першому ряду з’являється стрілка. Натисніть «вгору», щоб побачити їх, у кожного каналу своя вкладка. «Завжди» показує їх сама, щойно ви перейшли до застосунку. Інші застосунки лишаються як є.</string>
     <string name="st_app_content_always">Завжди</string>
+    <string name="st_app_content_bg">Тло</string>
+    <string name="st_app_content_bg_hint">За відкритою полицею: розмиті шпалери або постер вибраної картки (він підвантажується із застосунку, поки ви гортаєте картки).</string>
+    <string name="st_app_content_bg_blur">Розмиті шпалери</string>
+    <string name="st_app_content_bg_posters">Постери</string>
     <string name="tile_stock_home">Головний екран ТБ</string>
     <string name="tile_kids">Дітям</string>
     <string name="info_version">Версія %1$s (%2$d)</string>

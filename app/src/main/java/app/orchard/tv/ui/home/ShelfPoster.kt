@@ -18,9 +18,9 @@ import kotlin.math.roundToInt
 
 /**
  * The shelf's poster behind Home, over the wallpaper: it comes in with [show] (the shelf's
- * progress, 0 to 1), and is already faded out towards the bottom panel (ShelfFade), so the
- * wallpaper shows under the panel and the panel's glass is left as it is. A new poster fades in over
- * the last. Only the draw phase reads the animations, so nothing here recomposes while they run.
+ * progress, 0 to 1), and the panel's glass is left as it is, not tinted to it. A new poster fades
+ * in over the last. Only the draw phase reads the animations, so nothing here recomposes while
+ * they run.
  */
 @Composable
 fun ShelfPoster(poster: ImageBitmap?, show: () -> Float) {

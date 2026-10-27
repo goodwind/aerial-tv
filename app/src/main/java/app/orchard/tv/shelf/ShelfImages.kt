@@ -30,7 +30,7 @@ object ShelfImages {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    /** Backdrops by URI: shaded the way Home shades a wallpaper, faded out towards the bottom panel. */
+    /** Backdrops by URI: shaded the way Home shades a wallpaper. */
     private val backdrops = LruCache<String, Bitmap>(12)
 
     /** A home media server is often a small box: a few requests at a time, not a burst of twenty. */
@@ -55,8 +55,7 @@ object ShelfImages {
 
     /**
      * The backdrop for a card: its picture blurred small and shaded the way Home shades a
-     * wallpaper, faded to nothing towards the bottom panel (see [ShelfFade]), drawn stretched in
-     * one pass over the wallpaper. Blurred, a 300 px poster looks as good as a 4K one.
+     * wallpaper, drawn stretched in one pass over the wallpaper. Blurred, a 300 px poster looks as good as a 4K one.
      */
     suspend fun backdrop(uri: String): Bitmap? {
         backdrops.get(uri)?.let { return it }
@@ -64,8 +63,7 @@ object ShelfImages {
             val bytes = fetch(uri) ?: return@withContext null
             val src = decode(bytes, 640, 360) ?: return@withContext null
             val frost = Images.frost(src)
-            val shaded = Images.shadeForHome(frost.copy(Bitmap.Config.ARGB_8888, true))
-            ShelfFade.apply(shaded).also { backdrops.put(uri, it) }
+            Images.shadeForHome(frost.copy(Bitmap.Config.ARGB_8888, true)).also { backdrops.put(uri, it) }
         }
     }
 

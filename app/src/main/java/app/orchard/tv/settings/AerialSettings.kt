@@ -147,6 +147,9 @@ object AerialSettings {
      */
     var appContentMode by mutableStateOf(AppContentMode.OnUp); private set
 
+    /** Behind an open shelf: the wallpaper frosted, or the selected card's poster. */
+    var appContentPosters by mutableStateOf(false); private set
+
     /** Whether any shelf shows. */
     val appContent: Boolean get() = appContentMode != AppContentMode.Off
 
@@ -259,6 +262,7 @@ object AerialSettings {
             prefs.getString("app_content_mode", null),
             if (prefs.contains("app_content")) prefs.getBoolean("app_content", true) else null,
         )
+        appContentPosters = prefs.getBoolean("app_content_posters", false)
         screensaverMinutes = prefs.getInt("screensaver_minutes", DEFAULT_SCREENSAVER_MINUTES)
         aerialQuality = AerialQuality.of(prefs.getString("aerial_quality", null))
         mixSources = MixPick.parseSources(prefs.getString("mix_sources", null))
@@ -361,6 +365,11 @@ object AerialSettings {
             // Kept so that an older build still reads on or off.
             putBoolean("app_content", mode != AppContentMode.Off)
         }
+    }
+
+    fun chooseAppContentPosters(on: Boolean) {
+        appContentPosters = on
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean("app_content_posters", on) }
     }
 
     fun chooseWallpaperAlwaysMoves(on: Boolean) {
