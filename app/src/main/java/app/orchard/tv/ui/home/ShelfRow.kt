@@ -75,6 +75,8 @@ import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.ui.components.focusRing
 import app.orchard.tv.ui.components.isSelect
 import app.orchard.tv.ui.theme.LocalReducedMotion
+import app.orchard.tv.ui.theme.Glyph
+import app.orchard.tv.ui.theme.GlyphIcon
 import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Palette
 import app.orchard.tv.ui.theme.Type
@@ -90,6 +92,9 @@ data class ShelfContent(val pkg: String, val items: List<ShelfItem>) {
 val ShelfSummaryH = 84.dp
 
 private const val FOCUSED_SCALE = 1.08f
+
+/** How many posters of a closed shelf are fetched ahead. */
+private const val PREFETCH = 6
 private val CardCorner = 10.dp
 private val CardGap = 20.dp
 private val PlaceholderFill = Color(0xE62C2C2E)
@@ -117,6 +122,12 @@ fun ShelfRow(
     margin: Dp,
     screenWidth: Dp,
     cardHeight: Dp,
+    /**
+     * The cards are on screen or on their way: the shelf is open, or fading. Closed, only the focus
+     * target is here, so moving along the top row does not compose, fetch and animate a screenful of
+     * cards that nobody sees (measured on MiTV-MFTR0: three times the frames and 15-20% janky).
+     */
+    shown: Boolean,
     onFocusChange: (Boolean) -> Unit,
     onTab: (Int) -> Unit,
     onSelect: (Int) -> Unit,
@@ -162,10 +173,22 @@ fun ShelfRow(
         }
     }
 
+    // Closed, the first posters are fetched anyway (into ShelfImages' cache, off the main thread), so
+    // that opening finds them and does not show empty cards.
+    LaunchedEffect(items, cardHeight, shown) {
+        if (shown) return@LaunchedEffect
+        items.take(PREFETCH).forEach { item ->
+            val uri = item.image ?: return@forEach
+            val w = with(density) { (cardWidth(cardHeight, item.aspect).toPx() * FOCUSED_SCALE).roundToInt() }
+            val h = with(density) { (cardHeight.toPx() * FOCUSED_SCALE).roundToInt() }
+            ShelfImages.card(uri, w, h)
+        }
+    }
+
     val dim by animateFloatAsState(if (active) 1f else 0.78f, tween(220, easing = Motion.EaseOut), label = "shelf-dim")
 
     Column(modifier) {
-        if (tabs.size > 1) {
+        if (shown && tabs.size > 1) {
             // Stands above the column without taking room in it, so the cards keep their place
             // whether or not an app has more than one channel.
             ShelfTabs(
@@ -178,7 +201,7 @@ fun ShelfRow(
         }
         // The summary: what the selected program is. The selection is kept when focus goes back
         // down to the app, so the row, the summary and the backdrop always agree.
-        Crossfade(
+        if (shown) Crossfade(
             targetState = items[index],
             animationSpec = tween(if (reduced) 0 else 200, easing = Motion.EaseOut),
             modifier = Modifier.padding(start = margin).width(screenWidth * 0.55f).height(ShelfSummaryH),
@@ -243,7 +266,7 @@ fun ShelfRow(
                 }
                 .focusable(enabled),
         ) {
-            items.forEachIndexed { i, item ->
+            if (shown) items.forEachIndexed { i, item ->
                 val w = cardWidth(cardHeight, item.aspect)
                 ShelfCard(
                     item = item,
@@ -420,4 +443,51 @@ private fun shelfMeta(item: ShelfItem): String? {
         },
     )
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+
+/**
+ * The arrow over the tile of an app with a shelf: Up opens it. The animation is read in the layer
+ * only, never in composition: read in Home's own body, every frame of its spring recomposed the whole
+ * screen (on a MiTV-MFTR0 that was about a second of full frames for each app with content passed on
+ * the top row, and 15-20% of the frames janky).
+ */
+@Composable
+fun ShelfArrow(
+    show: Boolean,
+    /** The tile it is over. */
+    index: Int,
+    slot: (Int) -> Pair<Dp, Dp>,
+    tileW: Dp,
+    plateV: Dp,
+    /** 0 to 1: gone as the grid scrolls up. */
+    fade: () -> Float,
+    onTap: () -> Unit,
+) {
+    val reduced = LocalReducedMotion.current
+    val arrowIn = animateFloatAsState(
+        if (show) 1f else 0f,
+        // A little overshoot: it arrives with a nudge upward, the way Up goes.
+        if (reduced) snap() else spring(dampingRatio = 0.5f, stiffness = 320f), label = "shelf-arrow",
+    )
+    // Where the tile it was over stood, while it fades out.
+    val at = remember { intArrayOf(0) }
+    if (show) at[0] = index
+    val (ax, ay) = slot(at[0])
+    Box(
+        Modifier
+            .offset(ax + tileW / 2 - 22.dp, ay - plateV - 10.dp)
+            .size(44.dp, plateV + 10.dp)
+            .graphicsLayer {
+                val v = arrowIn.value
+                alpha = v.coerceIn(0f, 1f) * fade()
+                translationY = (1f - v) * 8.dp.toPx()
+            }
+            .pointerInput(Unit) { detectTapGestures { if (arrowIn.value > 0.5f) onTap() } },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Dark under white, so it reads over a bright wallpaper as well as a dark one.
+        GlyphIcon(Glyph.ChevronRight, Color.Black.copy(alpha = 0.35f), 20.dp, Modifier.offset(y = 1.dp).graphicsLayer { rotationZ = -90f })
+        GlyphIcon(Glyph.ChevronRight, Color.White, 20.dp, Modifier.graphicsLayer { rotationZ = -90f })
+    }
 }
