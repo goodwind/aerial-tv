@@ -706,7 +706,10 @@ fun HomeScreen(
             val clipGlass = Wallpapers.clipGlass?.takeIf { it.first == clip }?.second
             HomeBackground(
                 backdrop = shelfPicture?.first ?: Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
-                frosted = shelfPicture?.second ?: Wallpapers.frosted.takeIf { Wallpapers.backdrop != null },
+                // The glass keeps the wallpaper's frost while the shelf is up: swapping it for the
+                // poster's re-recorded every piece of glass for 450 ms on each open, close and card
+                // (MiTV-MFTR0: 84-95% of the frames of closing the shelf janky, p90 48 ms; kept, 0-5%, 11 ms).
+                frosted = Wallpapers.frosted.takeIf { Wallpapers.backdrop != null } ?: shelfPicture?.second,
                 plate = plate,
                 scroll = { scroll.value },
                 collapse = collapsePx,
