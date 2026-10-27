@@ -14,8 +14,10 @@ it, and the app is built from a throwaway branch `build` that merges them all.
 | `thin-focus-ring` | thinner high-contrast ring on the tiles | PR #352 |
 | `app-info-for-firmware-without-it` | read-only App Info for firmware without one (already inside `app-info-adb`) | PR #233 |
 | `app-info-adb` | adbd access for App Info, off until the owner agrees, revoked by turning it off | PR #356 (stacked on #233) |
-| `app-content-shelf` | app content shelf (Slides Out / Off / Always), tabs, asks apps to publish, big app name | PR #364 |
+| `app-content-shelf` | app content shelf (Slides Out / Off / Always), tabs, asks apps to publish, big app name; its backdrop is the frosted wallpaper or the card's poster (a setting) | PR #364 |
 | `personalization-tabs` | Personalize in pages: Home Screen, Wallpaper, Screensaver, System | PR #748 |
+| `dvd-screensaver` | the bouncing DVD logo screensaver (the logo is drawn in code) | PR #777 |
+| `dvd-logo-picture` | the DVD Video logo as a picture instead of the drawn one, on top of `dvd-screensaver` (a trademark: kept out of upstream and of releases; merge it into a private `build` only) | local only |
 | `auto-wallpapers` | auto wallpapers (Bing, Wikimedia, NASA, Unsplash, own photos) | **not taken upstream** (#353 closed): fork only |
 
 ## Bringing the fork up to upstream
@@ -28,13 +30,13 @@ git fetch origin fork
 git checkout main && git merge --ff-only origin/main && git push fork main
 # 1. a branch with an open PR takes upstream's main by merge (the maintainer also pushes to those
 #    branches, so never rebase them); fork-only branches (fork-layer, auto-wallpapers) are rebased
-for b in thin-focus-ring app-info-adb app-content-shelf personalization-tabs; do
+for b in thin-focus-ring app-info-adb app-content-shelf personalization-tabs dvd-screensaver; do
   git checkout $b && git merge origin/main        # fix, push fork $b
 done
 for b in fork-layer auto-wallpapers; do git checkout $b && git rebase origin/main; done   # push --force-with-lease
 # 2. build: a new branch off upstream with all of them
 git checkout -b build origin/main
-for b in fork-layer thin-focus-ring app-info-adb app-content-shelf personalization-tabs auto-wallpapers; do git merge $b; done
+for b in fork-layer thin-focus-ring app-info-adb app-content-shelf personalization-tabs dvd-screensaver auto-wallpapers; do git merge $b; done
 python3 tools/fork-stamp.py 1                     # N = the fork's build of this upstream version
 ./gradlew testStandardDebugUnitTest assembleStandardRelease assembleGuardRelease
 ```
