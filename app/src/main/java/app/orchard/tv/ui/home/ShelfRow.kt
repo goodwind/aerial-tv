@@ -90,6 +90,9 @@ data class ShelfContent(val pkg: String, val items: List<ShelfItem>) {
 val ShelfSummaryH = 84.dp
 
 private const val FOCUSED_SCALE = 1.08f
+
+/** How many posters of a closed shelf are fetched ahead. */
+private const val PREFETCH = 6
 private val CardCorner = 10.dp
 private val CardGap = 20.dp
 private val PlaceholderFill = Color(0xE62C2C2E)
@@ -117,6 +120,12 @@ fun ShelfRow(
     margin: Dp,
     screenWidth: Dp,
     cardHeight: Dp,
+    /**
+     * The cards are on screen or on their way: the shelf is open, or fading. Closed, only the focus
+     * target is here, so moving along the top row does not compose, fetch and animate a screenful of
+     * cards that nobody sees (measured on MiTV-MFTR0: three times the frames and 15-20% janky).
+     */
+    shown: Boolean,
     onFocusChange: (Boolean) -> Unit,
     onTab: (Int) -> Unit,
     onSelect: (Int) -> Unit,
@@ -162,10 +171,22 @@ fun ShelfRow(
         }
     }
 
+    // Closed, the first posters are fetched anyway (into ShelfImages' cache, off the main thread), so
+    // that opening finds them and does not show empty cards.
+    LaunchedEffect(items, cardHeight, shown) {
+        if (shown) return@LaunchedEffect
+        items.take(PREFETCH).forEach { item ->
+            val uri = item.image ?: return@forEach
+            val w = with(density) { (cardWidth(cardHeight, item.aspect).toPx() * FOCUSED_SCALE).roundToInt() }
+            val h = with(density) { (cardHeight.toPx() * FOCUSED_SCALE).roundToInt() }
+            ShelfImages.card(uri, w, h)
+        }
+    }
+
     val dim by animateFloatAsState(if (active) 1f else 0.78f, tween(220, easing = Motion.EaseOut), label = "shelf-dim")
 
     Column(modifier) {
-        if (tabs.size > 1) {
+        if (shown && tabs.size > 1) {
             // Stands above the column without taking room in it, so the cards keep their place
             // whether or not an app has more than one channel.
             ShelfTabs(
@@ -178,7 +199,7 @@ fun ShelfRow(
         }
         // The summary: what the selected program is. The selection is kept when focus goes back
         // down to the app, so the row, the summary and the backdrop always agree.
-        Crossfade(
+        if (shown) Crossfade(
             targetState = items[index],
             animationSpec = tween(if (reduced) 0 else 200, easing = Motion.EaseOut),
             modifier = Modifier.padding(start = margin).width(screenWidth * 0.55f).height(ShelfSummaryH),
@@ -243,7 +264,7 @@ fun ShelfRow(
                 }
                 .focusable(enabled),
         ) {
-            items.forEachIndexed { i, item ->
+            if (shown) items.forEachIndexed { i, item ->
                 val w = cardWidth(cardHeight, item.aspect)
                 ShelfCard(
                     item = item,

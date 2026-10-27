@@ -807,6 +807,7 @@ fun HomeScreen(
                                 margin = metrics.margin,
                                 screenWidth = screenW,
                                 cardHeight = metrics.shelfCardH,
+                                shown = shelfProgress > 0.001f,
                                 onFocusChange = { focused -> if (pkg == shelf?.pkg) { inShelf = focused; if (focused) pillFocused = false } },
                                 onTab = { shelfTabs[pkg] = it },
                                 onSelect = { shelfIndexes[shelfKey(pkg)] = it },
