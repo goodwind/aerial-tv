@@ -85,6 +85,7 @@ import app.orchard.tv.wallpaper.Wallpapers
 import app.orchard.tv.weather.Weather
 import app.orchard.tv.weather.WeatherKind
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -461,7 +462,14 @@ private fun PersonalizeTabs(current: PersonalizeTab, onTab: (PersonalizeTab) -> 
     Row(Modifier.padding(start = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         for (t in PersonalizeTab.entries) {
             Pressable(onClick = { onTab(t) }, focusRequester = if (t == current) start else null, focusedScale = 1.06f) { state ->
-                LaunchedEffect(state.focused) { if (state.focused) onTab(t) }
+                // The page follows a moment after the pill, so the pill starts moving first and
+                // passing over a page on the way does not rebuild it.
+                LaunchedEffect(state.focused) {
+                    if (state.focused) {
+                        delay(90)
+                        onTab(t)
+                    }
+                }
                 val on = t == current
                 val bg by animateColorAsState(
                     when {
@@ -471,7 +479,11 @@ private fun PersonalizeTabs(current: PersonalizeTab, onTab: (PersonalizeTab) -> 
                     },
                     tween(140, easing = Motion.EaseOut), label = "tab-bg",
                 )
-                val fg = if (state.focused) Palette.OnFocus else if (on) Palette.Label else Palette.SecondaryLabel
+                // The label changes colour with the pill, not before it.
+                val fg by animateColorAsState(
+                    if (state.focused) Palette.OnFocus else if (on) Palette.Label else Palette.SecondaryLabel,
+                    tween(140, easing = Motion.EaseOut), label = "tab-fg",
+                )
                 Box(Modifier.clip(RoundedCornerShape(50)).background(bg).height(40.dp).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
                     BasicText(stringResource(t.label), style = Type.Body.copy(color = fg))
                 }
