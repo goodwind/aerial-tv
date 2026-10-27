@@ -30,6 +30,7 @@ adb shell cmd notification allow_listener app.orchard.tv/app.orchard.tv.guard.Re
 adb shell appops set app.orchard.tv SYSTEM_ALERT_WINDOW allow
 adb shell appops set app.orchard.tv APP_AUTO_START allow   # ${T.tclOnly}
 adb shell am start -n app.orchard.tv/.MainActivity`;
+    $('#adaptprompt').textContent = T.adapt(ip, SITE + T.adaptGuide);
   }
 
   $('#ip').value = store.get('aerial-ip') || '';
@@ -70,6 +71,7 @@ adb shell am start -n app.orchard.tv/.MainActivity`;
       box.setAttribute('aria-valuenow', Math.round(x * 100));
       // At either end the line and its knob would hang half off the screen; let them go.
       divider.style.opacity = x > 0.03 && x < 0.97 ? 1 : 0;
+      box.classList.toggle('done', x >= 0.999);
     };
     const tick = () => {
       const d = target - x;

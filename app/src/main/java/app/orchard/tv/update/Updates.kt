@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -43,6 +44,13 @@ object Updates {
     private const val VERSION_URL = "https://aerial.qust.me/download/version.txt"
     private const val CHECK_EVERY_MS = 3 * 60 * 60 * 1000L
     private const val RETRY_MS = 10 * 60 * 1000L
+
+    /**
+     * A source that delivers less than [STALL_BYTES] in [STALL_MS] is given up for the next one
+     * (issue #390). A slow but moving download (about 8 KB/s and up) still finishes.
+     */
+    private const val STALL_MS = 30_000L
+    private const val STALL_BYTES = 256 * 1024L
     const val CONTROL_CENTER_MAX_AGE_MS = RETRY_MS
 
     /** This build's version, e.g. "1.17" (the guard build's "-guard" left off). */
@@ -123,6 +131,8 @@ object Updates {
         data object Opened : Install
         /** Aerial may not install apps yet; the TV's setting for it is open. */
         data object NeedsPermission : Install
+        /** Android 6 firmware requires storage access before the APK can be saved. */
+        data object NeedsStoragePermission : Install
         data class Failed(val reason: Failure) : Install
     }
 
@@ -154,6 +164,11 @@ object Updates {
         if (install is Install.Downloading) return
         val app = context.applicationContext
         if (!canInstall(app)) { install = Install.Failed(Failure.NotOfficial); return }
+        if (LegacyUpdateStorage.needsPermission(app)) {
+            install = Install.NeedsStoragePermission
+            LegacyUpdateStorage.requestPermission(context)
+            return
+        }
         if (Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {
             // Xiaomi MiTV-MFTR0 has this page; TCL MT5879 does not (tools/install.sh grants it there).
             val settings = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
@@ -237,11 +252,18 @@ object Updates {
     }
 
     private suspend fun download(url: String, file: File) {
-        file.parentFile?.mkdirs()
-        val part = File(file.parentFile, file.name + ".part")
+        val directory = checkNotNull(file.parentFile)
+        check(directory.isDirectory || directory.mkdirs()) { "Cannot create update directory: $directory" }
+        check(directory.canWrite()) { "Cannot write update directory: $directory" }
+        val part = File(directory, file.name + ".part")
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000
         c.readTimeout = 20_000
+        // A throttled route can keep the TLS handshake up and deliver a byte now and then, so no
+        // read() ever blocks long enough to time out and the progress bar sits at 0% for good
+        // (issue #390, FFALCON/TCL on China Unicom). So the bytes are counted, not each read timed.
+        var windowAt = SystemClock.elapsedRealtime()
+        var windowFrom = 0L
         try {
             if (c.responseCode != HttpURLConnection.HTTP_OK) error("HTTP ${c.responseCode}")
             val total = c.contentLength.toLong()
@@ -255,6 +277,12 @@ object Updates {
                         if (n < 0) break
                         out.write(buf, 0, n)
                         done += n
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - windowAt >= STALL_MS) {
+                            if (done - windowFrom < STALL_BYTES) error("stalled: ${done - windowFrom} bytes in ${(now - windowAt) / 1000} s")
+                            windowAt = now
+                            windowFrom = done
+                        }
                         val percent = if (total > 0) (done * 100 / total).toInt() else 0
                         if (percent != shown) {
                             shown = percent
