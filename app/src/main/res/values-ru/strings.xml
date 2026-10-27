@@ -89,6 +89,7 @@
     <string name="ss_aerial">Аэросъёмка</string>
     <string name="ss_photos">Фото</string>
     <string name="ss_clock">Часы</string>
+    <string name="ss_dvd">DVD</string>
     <string name="wp_phone_title">Настройка с телефона или компьютера</string>
     <string name="wp_phone_body">Отсканируйте код или откройте адрес ниже в браузере компьютера, чтобы отправлять фото и видео, менять значки приложений и выбирать город для погоды. Устройство и телевизор должны быть в одной сети.</string>
     <string name="wp_phone_offline">Подключите телевизор к сети, чтобы настроить его с телефона или компьютера.</string>
