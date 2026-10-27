@@ -400,20 +400,20 @@ fun WallpaperSheet(
                                     PinChoice(onPin, onFocused = { scope.launch { scroll.animateScrollTo(scroll.maxValue) } })
                                 }
                             }
-                        }
-                    }
-                    // Only where Aerial's own App Info is in use, which is where this is needed.
-                    if (remember { !AppDetails.hasSystemScreen(context) }) {
-                        Spacer(Modifier.height(22.dp))
-                        SectionTitle(R.string.wp_advanced)
-                        Group(stringResource(R.string.st_adb_hint)) { note ->
-                            Choices(
-                                R.string.st_adb, null, note,
-                                listOf(false to R.string.st_adb_off, true to R.string.st_adb_on),
-                                AerialSettings.adbAccess,
-                                { on -> if (on) showAdbDialog = true else AerialSettings.chooseAdbAccess(false) },
-                                first = true,
-                            )
+                            // Only where Aerial's own App Info is in use, which is where this is needed.
+                            if (remember { !AppDetails.hasSystemScreen(context) }) {
+                                Spacer(Modifier.height(22.dp))
+                                SectionTitle(R.string.wp_advanced)
+                                Group(stringResource(R.string.st_adb_hint)) { note ->
+                                    Choices(
+                                        R.string.st_adb, null, note,
+                                        listOf(false to R.string.st_adb_off, true to R.string.st_adb_on),
+                                        AerialSettings.adbAccess,
+                                        { on -> if (on) showAdbDialog = true else AerialSettings.chooseAdbAccess(false) },
+                                        first = true,
+                                    )
+                                }
+                            }
                         }
                     }
                     Spacer(Modifier.height(24.dp))
