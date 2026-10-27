@@ -232,6 +232,10 @@
     <string name="st_app_content_off">Өшірулі</string>
     <string name="st_app_content_hint">«Қарауды жалғастыру» немесе өз топтамалары бар қолданбаның бірінші қатардағы тақтайшасының үстінде көрсеткі пайда болады. Оларды көру үшін «жоғары» басыңыз, әр арнаның өз қойындысы бар. «Әрқашан» қолданбаға көшкеніңізде оларды өздігінен көрсетеді. Басқа қолданбалар өзгеріссіз қалады.</string>
     <string name="st_app_content_always">Әрқашан</string>
+    <string name="st_app_content_bg">Мазмұн сөресінің фоны</string>
+    <string name="st_app_content_bg_hint">Ашық сөре артында: бұлдыратылған тұсқағаз немесе таңдалған карточканың постері (карточкаларды ауыстырған сайын қолданбадан жүктеледі).</string>
+    <string name="st_app_content_bg_blur">Бұлдыр тұсқағаз</string>
+    <string name="st_app_content_bg_posters">Постерлер</string>
     <string name="tile_stock_home">ТД басты экраны</string>
     <string name="tile_kids">Балаларға</string>
     <string name="ss_videos">Бейне</string>

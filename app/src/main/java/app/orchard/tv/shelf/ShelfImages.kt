@@ -30,8 +30,8 @@ object ShelfImages {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    /** Frosted backdrops by URI: (shaded for Home, plain frosted for the grid and the shelf glass). */
-    private val backdrops = LruCache<String, Pair<Bitmap, Bitmap>>(12)
+    /** Backdrops by URI: shaded the way Home shades a wallpaper. */
+    private val backdrops = LruCache<String, Bitmap>(12)
 
     /** A home media server is often a small box: a few requests at a time, not a burst of twenty. */
     private val gate = Semaphore(3)
@@ -55,16 +55,15 @@ object ShelfImages {
 
     /**
      * The backdrop for a card: its picture blurred small and shaded the way Home shades a
-     * wallpaper, drawn stretched in one pass. Blurred, a 300 px poster looks as good as a 4K one.
+     * wallpaper, drawn stretched in one pass over the wallpaper. Blurred, a 300 px poster looks as good as a 4K one.
      */
-    suspend fun backdrop(uri: String): Pair<Bitmap, Bitmap>? {
+    suspend fun backdrop(uri: String): Bitmap? {
         backdrops.get(uri)?.let { return it }
         return withContext(Dispatchers.IO) {
             val bytes = fetch(uri) ?: return@withContext null
             val src = decode(bytes, 640, 360) ?: return@withContext null
             val frost = Images.frost(src)
-            val shaded = Images.shadeForHome(frost.copy(Bitmap.Config.ARGB_8888, true))
-            (shaded to frost).also { backdrops.put(uri, it) }
+            Images.shadeForHome(frost.copy(Bitmap.Config.ARGB_8888, true)).also { backdrops.put(uri, it) }
         }
     }
 

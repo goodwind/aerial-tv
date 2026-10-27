@@ -133,6 +133,10 @@
     <string name="st_app_content_off">不显示</string>
     <string name="st_app_content_hint">第一排里提供「继续观看」或自己推荐的 App，磁贴上方会出现一个小箭头；按「上」查看，每个频道一个标签。选「始终显示」则一移到这个 App 就自动展开。没有提供内容的 App 保持原样。</string>
     <string name="st_app_content_always">始终显示</string>
+    <string name="st_app_content_bg">内容栏背景</string>
+    <string name="st_app_content_bg_hint">展开的内容栏后面：模糊的壁纸，或所选卡片的海报（随你移动卡片从 App 加载）。</string>
+    <string name="st_app_content_bg_blur">模糊壁纸</string>
+    <string name="st_app_content_bg_posters">海报</string>
     <string name="shelf_continue">继续观看</string>
     <string name="shelf_season">第 %1$s 季</string>
     <string name="shelf_episode">第 %1$s 集</string>

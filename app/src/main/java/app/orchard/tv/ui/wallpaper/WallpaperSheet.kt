@@ -190,6 +190,11 @@ fun WallpaperSheet(
                             ),
                             AerialSettings.appContentMode, AerialSettings::chooseAppContentMode,
                         )
+                        if (AerialSettings.appContent) Choices(
+                            R.string.st_app_content_bg, stringResource(R.string.st_app_content_bg_hint), note,
+                            listOf(false to R.string.st_app_content_bg_blur, true to R.string.st_app_content_bg_posters),
+                            AerialSettings.appContentPosters, AerialSettings::chooseAppContentPosters,
+                        )
                         Choices(
                             R.string.st_names, stringResource(R.string.st_names_hint), note,
                             listOf(

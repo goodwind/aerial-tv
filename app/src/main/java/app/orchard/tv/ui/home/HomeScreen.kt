@@ -189,6 +189,13 @@ private class GridMetrics(screenW: Dp, screenH: Dp, oneRow: Boolean, plateNames:
      */
     val shelfLift = (topRowY + firstGap + pitchY * 2 + 12.dp - screenH).coerceAtLeast(0.dp)
 
+    /**
+     * How far the top row (and its plate) goes down while the shelf is up, to where it sits in one
+     * row with nothing peeking: the rows below are hidden then, and the room under it would be empty.
+     */
+    val shelfDrop = ((if (plate) screenH - tileH - (PlateMarginBottom + PlatePadV) - firstGap else screenH - tileH - 70.dp) - topRowY)
+        .coerceAtLeast(0.dp)
+
     fun slot(index: Int, onTop: Boolean): Pair<Dp, Dp> {
         val row = index / COLUMNS
         return Pair(margin + pitchX * (index % COLUMNS), topRowY + pitchY * row + if (row > 0 && onTop) firstGap else 0.dp)
@@ -403,24 +410,26 @@ fun HomeScreen(
         if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 140f),
         label = "shelf",
     )
+    // With posters chosen for the backdrop (Settings), it follows the selected card, after a settle.
+    val shelfPosters = AerialSettings.appContentPosters
+    val shelfImage = shelf?.takeIf { shelfUp && shelfPosters }?.let { c ->
+        val items = c.tabs[(shelfTabs[c.pkg] ?: 0).coerceIn(0, c.tabs.lastIndex)].items
+        items.getOrNull(shelfIndex)?.image ?: items.firstNotNullOfOrNull { it.image }
+    }
+    var shelfBackdrop by remember { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(shelfImage) {
+        // Closing, the last poster stays to fade out with the shelf (ShelfPoster).
+        if (shelfImage == null) { if (shelfUp) shelfBackdrop = null; return@LaunchedEffect }
+        delay(220)
+        // A picture out of reach falls back to the wallpaper rather than keeping another card's.
+        shelfBackdrop = ShelfImages.backdrop(shelfImage)?.asImageBitmap()
+    }
     // Focus cannot stay on a shelf that is going away.
     LaunchedEffect(shelf == null) {
         if (shelf == null && inShelf) {
             inShelf = false
             focusedKey?.let { runCatching { requester(it).requestFocus() } }
         }
-    }
-    // The backdrop follows the selected card, after the same kind of settle.
-    val shelfImage = shelf?.takeIf { shelfUp }?.let { c ->
-        val items = c.tabs[(shelfTabs[c.pkg] ?: 0).coerceIn(0, c.tabs.lastIndex)].items
-        items.getOrNull(shelfIndex)?.image ?: items.firstNotNullOfOrNull { it.image }
-    }
-    var shelfBackdrop by remember { mutableStateOf<Pair<ImageBitmap, ImageBitmap>?>(null) }
-    LaunchedEffect(shelfImage) {
-        if (shelfImage == null) { shelfBackdrop = null; return@LaunchedEffect }
-        delay(220)
-        // A picture out of reach falls back to the wallpaper rather than keeping another card's.
-        shelfBackdrop = ShelfImages.backdrop(shelfImage)?.let { (shaded, frost) -> shaded.asImageBitmap() to frost.asImageBitmap() }
     }
     // The large clock's time goes back the way it came, at half the pace. On Home's 650 ms ease-out
     // it was most of the way back in two or three frames (Xiaomi MiTV-MFTR0: 45-57 ms a frame as it
@@ -574,10 +583,12 @@ fun HomeScreen(
         val screenW = maxWidth
 
         val target = with(density) { metrics.scrollFor(if (inGrid) focusedRow else 0, rows).toPx() }
-        val lift by animateFloatAsState(
+        val liftUp by animateFloatAsState(
             with(density) { if (focusedRow > 0 && !inGrid) metrics.shelfLift.toPx() else 0f },
             if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 280f), label = "shelf-lift",
         )
+        // Up for the second row, and down with the shelf (with its progress: the row, plate and shelf go together).
+        fun lift(): Float = liftUp - shelfProgress * with(density) { metrics.shelfDrop.toPx() }
         val maxScroll = with(density) { metrics.scrollFor(rows - 1, rows).toPx() }.coerceAtLeast(0f)
         LaunchedEffect(maxScroll) { scroll.updateBounds(0f, maxScroll) }
         val pastShelf by remember(collapsePx) { derivedStateOf { scroll.value > collapsePx / 2 } }
@@ -692,7 +703,6 @@ fun HomeScreen(
             }
             // The app's own picture while its shelf is up; else the chosen wallpaper, or in "Follow
             // App" mode light from the focused app.
-            val shelfPicture = shelfBackdrop.takeIf { shelfUp }
             // Another wallpaper chosen: nothing shows through until the new one has a frame.
             LaunchedEffect(Wallpapers.selectedId) { filmCover.snapTo(0f) }
             // The aerial film's own glass for the grid: the one playing or stopped, else the one
@@ -702,8 +712,11 @@ fun HomeScreen(
             LaunchedEffect(clip) { Wallpapers.showClipGlass(clip) }
             val clipGlass = Wallpapers.clipGlass?.takeIf { it.first == clip }?.second
             HomeBackground(
-                backdrop = shelfPicture?.first ?: Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
-                frosted = shelfPicture?.second ?: Wallpapers.frosted.takeIf { Wallpapers.backdrop != null },
+                backdrop = Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
+                shelfPoster = shelfBackdrop,
+                shelfPosters = shelfPosters,
+                shelfShow = { shelfProgress },
+                frosted = Wallpapers.frosted.takeIf { Wallpapers.backdrop != null },
                 plate = plate,
                 scroll = { scroll.value },
                 collapse = collapsePx,
@@ -718,7 +731,7 @@ fun HomeScreen(
                 saverImage = saverImage,
                 saverReveal = { saverReveal.value },
                 saverPush = { saverPush.value },
-                lift = { lift },
+                lift = { lift() },
                 wallpaper = Wallpapers.selectedId,
                 glassAwaitsStop = Wallpapers.selectedId == Wallpapers.LIVE && clipGlass == null,
                 gridGlass = clipGlass,
@@ -797,7 +810,7 @@ fun HomeScreen(
                                 .padding(top = metrics.shelfRowY)
                                 .graphicsLayer {
                                     alpha = shelfProgress * scrolledAway(scroll.value, collapsePx)
-                                    translationY = (1f - shelfProgress) * 14.dp.toPx()
+                                    translationY = (1f - shelfProgress) * 14.dp.toPx() - lift()
                                 },
                             label = "shelf-app",
                         ) { pkg ->
@@ -855,7 +868,7 @@ fun HomeScreen(
                         val heroY = metrics.topRowY - 74.dp
                         val shelfTop = metrics.shelfRowY - if ((shelf?.tabs?.size ?: 0) > 1) 44.dp else 0.dp
                         val heroUp = shelfTop - 58.dp
-                        val roomAbove = heroUp >= 56.dp
+                        val roomAbove = heroUp + metrics.shelfDrop >= 56.dp
                         BasicText(
                             text = hero.label,
                             style = Type.Title.copy(fontSize = 42.sp, letterSpacing = (-0.02).em),
@@ -866,7 +879,8 @@ fun HomeScreen(
                                 .padding(start = metrics.margin, top = heroY)
                                 .graphicsLayer {
                                     val p = shelfProgress.coerceIn(0f, 1f)
-                                    translationY = if (roomAbove) -(heroY - heroUp).toPx() * p else 0f
+                                    // Rises with the plate when Home lifts for the second row.
+                                    translationY = (if (roomAbove) -(heroY - heroUp).toPx() * p else 0f) - lift()
                                     alpha = (1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)) * if (roomAbove) 1f else 1f - p
                                 },
                         )
@@ -925,15 +939,18 @@ fun HomeScreen(
                             },
                             modifier = Modifier
                                 // Lifted on the shelf with the plate; the clock above stays put.
-                                .offset { slot.value - IntOffset(0, lift.roundToInt()) }
+                                .offset { slot.value - IntOffset(0, lift().roundToInt()) }
                                 // Up from the top row goes to the app's shelf when it has one: its own
                                 // (not one still showing for the app just left) and not scrolled away.
                                 .focusProperties {
                                     if (index < COLUMNS && shelf?.pkg == app.packageName && !pastShelf) up = shelfRequester
                                 }
                                 .then(
-                                    if (hideBelow && index >= COLUMNS) Modifier.graphicsLayer {
-                                        alpha = (scroll.value / collapsePx * 2.5f).coerceIn(0f, 1f)
+                                    if (index >= COLUMNS) Modifier.graphicsLayer {
+                                        // The shelf up hides the rows below (a peeking or second row looked
+                                        // clumsy under it); they come back as it goes.
+                                        val away = 1f - shelfProgress.coerceIn(0f, 1f)
+                                        alpha = if (hideBelow) (scroll.value / collapsePx * 2.5f).coerceIn(0f, 1f) * away else away
                                         // No offscreen buffer: it would clip the focus frame to the tile.
                                         compositingStrategy = CompositingStrategy.ModulateAlpha
                                     } else Modifier,
