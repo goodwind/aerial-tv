@@ -41,6 +41,7 @@ The TV is connected once `adb devices` lists it as `device`.
 
 - **`unauthorized`**: the TV is asking "Allow USB debugging?". Ask the user to choose Allow and check Always allow, then run `adb devices` again. Android 4.0-4.2.1 has no such prompt; don't wait for it.
 - **`failed to connect`, `Connection refused` or a timeout**: ADB debugging is off on the TV, or the IP is wrong. Ask the user to turn it on as below, then try again. Menus on Chinese firmware are in Chinese, so their names are in brackets.
+- **Port 5555 will not connect and the TV only offers "Wireless debugging"** (TCL Q9M / Q10L and other Android 11+ models): these firmwares pair first. Ask the user to open Developer options → Wireless debugging → **Pair device with pairing code** on the TV, and read you two IP:port pairs plus the 6-digit code — one pair from the pairing screen, one from the main wireless-debugging screen (the ports differ and change every time the screen is opened). Then run `adb pair <pair-screen-ip:port> <code>`, after it succeeds `adb connect <main-screen-ip:port>`, and once `adb devices` lists `device`, run `adb tcpip 5555` right away followed by `adb connect <IP>:5555` — later runs need no pairing. The new `install.sh` walks through this (interactive prompts, or set `ADB_PAIR=<ip:port> ADB_CODE=<code> ADB_CONNECT=<ip:port>` before running). Some TCL firmwares (Q10M, 鹤 7 Pro) have no pairing-code entry; there a USB cable to a computer and one `adb tcpip 5555` is the only way in.
 
 | TV | How to turn on ADB |
 |---|---|
@@ -48,11 +49,13 @@ The TV is connected once `adb devices` lists it as `device`.
 | TCL / FFALCON | Settings (设置) → About (关于) → **Device info** (本机信息), then press **Up, Down, Left, Right**, less than a second apart. A **More** (更多) group appears at the bottom; turn on **ADB** there |
 | OPPO TVs (S1 included) | Settings (设置) → System (系统) → About (关于本机) → **Model** (设备型号), press **Up, Up, Right, Right**, then OK. Then Settings → System → **Developer options** (开发者选项) and turn on **USB debugging** (USB 调试, sometimes called ADB debugging). From user reports; verified on the ColorOS TV in OPPO K9 |
 | Haier / MOOKA | Press the **Input/Source button on the TV itself**; while the source menu is open, press **Left, Left, Up, Right** on the remote. In the factory menu (海尔工厂菜单) set **ADB 调试开关** (ADB debugging) to on (some models: second page, Other Option → adb debug). Change nothing else, and never pick 工厂复位 (factory reset). (User reports, e.g. MOOKA U65H3; not verified) |
+| XGIMI H3 | There is no developer-options entry. Ask the user to download the third-party ADB enabler APK on a phone, then upload and install it with the XGIMI phone app and open it once. See `docs/devices/xgimi-h3.md`. Do not download or run that tool for them. Continue only after port 5555 shows `device` |
+| XGIMI Z7X | There is no developer-options entry. Ask the user to install a third-party ADB enabler from a USB drive and open it once. See `docs/devices/xgimi-z7x.md`. Do not download or run that tool for them. Continue only after port 5555 shows `device` |
 | Android TV / Google TV, Sony, Hisense and others | Settings → Device Preferences → About → press **Build** 7 times (not Android version, which shows an Easter egg; press Back to leave it), then turn on **USB debugging** in Developer options (sometimes called Network debugging) |
 
 The TV's IP address is usually under Settings → Network → the connected network (at the bottom of that page on OPPO S1).
 
-**TVs that cannot open ADB**: XGIMI H3, old LeTV sets, Honor Vision, old Konka models (no version number to tap) and similar. There is no way yet; tell the user it is not supported and don't keep trying.
+**TVs that cannot open ADB**: old LeTV sets, Honor Vision, old Konka models (no version number to tap) and similar. There is no way yet; tell the user it is not supported and don't keep trying.
 
 **Users without a computer**: some users installed Aerial with the phone apps 甲壳虫 ADB 助手 (Beetle ADB) and 超级小爱 (Super Xiaoai); we have not tested each one. They can follow steps 2 and 3 here on a phone (phone ADB tools usually can't run every command); once installed, run "Check" again from a computer or an agent where possible.
 
@@ -282,7 +285,7 @@ Then:
 - **Home opens the TV's own launcher again after a while**: try the same stop-and-open first.
 - **Check line 4 is 0 and line 3 does not list Aerial**: some firmwares block sideloaded accessibility services. Ask the user to allow Aerial's autostart and accessibility in the TV's security or permissions app, then run `adb shell am start -n app.orchard.tv/.MainActivity` and check again.
 - **Forgot the parental PIN**: `adb shell am broadcast -a app.orchard.tv.CONFIG -n app.orchard.tv/.guard.ConfigReceiver --ez clear_pin true` turns it off.
-- **Not supported**: LG webOS, Samsung Tizen, Huawei Vision (HarmonyOS), and Android 3.x or older (Android 4.0-4.4 gets Aerial Lite, above). TVs that cannot open ADB, such as XGIMI H3, old LeTV sets, Honor Vision and old Konka models (no version number to tap), can't be used yet.
+- **Not supported**: LG webOS, Samsung Tizen, Huawei Vision (HarmonyOS), and Android 3.x or older (Android 4.0-4.4 gets Aerial Lite, above). TVs that cannot open ADB, such as old LeTV sets, Honor Vision and old Konka models (no version number to tap), can't be used yet.
 
 ## What users ask
 

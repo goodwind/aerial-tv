@@ -9,6 +9,7 @@ import app.orchard.tv.settings.AppContentMode
 import app.orchard.tv.settings.NameMode
 import app.orchard.tv.system.DeviceProfile
 import app.orchard.tv.system.DiagLog
+import app.orchard.tv.system.HisenseSources
 import app.orchard.tv.system.SystemProbe
 import app.orchard.tv.update.Updates
 import app.orchard.tv.ui.components.UhdCanvas
@@ -78,7 +79,8 @@ class ConfigReceiver : BroadcastReceiver() {
         intent.getStringExtra("open_source")?.let { id ->
             val source = (SystemProbe.inputsToCheck(context) + SystemProbe.sources(context)).firstOrNull { it.id == id }
             resultData = if (source == null) "open_source: no input $id" else runCatching {
-                context.startActivity(source.intent)
+                // Hisense's inputs switch by broadcast (HisenseSources.open), the rest by activity.
+                if (!HisenseSources.open(context, source.intent)) context.startActivity(source.intent)
                 "open_source: ${source.label} -> ${source.intent.component?.flattenToShortString() ?: source.intent.data}" +
                     (source.xiaomiInput?.let { " input=$it" } ?: "")
             }.getOrElse { "open_source: ${it.javaClass.simpleName} ${it.message}" }
