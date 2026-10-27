@@ -415,12 +415,13 @@ fun HomeScreen(
         val items = c.tabs[(shelfTabs[c.pkg] ?: 0).coerceIn(0, c.tabs.lastIndex)].items
         items.getOrNull(shelfIndex)?.image ?: items.firstNotNullOfOrNull { it.image }
     }
-    var shelfBackdrop by remember { mutableStateOf<Pair<ImageBitmap, ImageBitmap>?>(null) }
+    var shelfBackdrop by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(shelfImage) {
-        if (shelfImage == null) { shelfBackdrop = null; return@LaunchedEffect }
+        // Closing, the last poster stays to fade out with the shelf (ShelfPoster).
+        if (shelfImage == null) { if (shelfUp) shelfBackdrop = null; return@LaunchedEffect }
         delay(220)
         // A picture out of reach falls back to the wallpaper rather than keeping another card's.
-        shelfBackdrop = ShelfImages.backdrop(shelfImage)?.let { (shaded, frost) -> shaded.asImageBitmap() to frost.asImageBitmap() }
+        shelfBackdrop = ShelfImages.backdrop(shelfImage)?.asImageBitmap()
     }
     // The large clock's time goes back the way it came, at half the pace. On Home's 650 ms ease-out
     // it was most of the way back in two or three frames (Xiaomi MiTV-MFTR0: 45-57 ms a frame as it
@@ -692,7 +693,6 @@ fun HomeScreen(
             }
             // The app's own picture while its shelf is up; else the chosen wallpaper, or in "Follow
             // App" mode light from the focused app.
-            val shelfPicture = shelfBackdrop.takeIf { shelfUp }
             // Another wallpaper chosen: nothing shows through until the new one has a frame.
             LaunchedEffect(Wallpapers.selectedId) { filmCover.snapTo(0f) }
             // The aerial film's own glass for the grid: the one playing or stopped, else the one
@@ -702,11 +702,10 @@ fun HomeScreen(
             LaunchedEffect(clip) { Wallpapers.showClipGlass(clip) }
             val clipGlass = Wallpapers.clipGlass?.takeIf { it.first == clip }?.second
             HomeBackground(
-                backdrop = shelfPicture?.first ?: Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
-                // The glass keeps the wallpaper's frost while the shelf is up: swapping it for the
-                // poster's re-recorded every piece of glass for 450 ms on each open, close and card
-                // (MiTV-MFTR0: 84-95% of the frames of closing the shelf janky, p90 48 ms; kept, 0-5%, 11 ms).
-                frosted = Wallpapers.frosted.takeIf { Wallpapers.backdrop != null } ?: shelfPicture?.second,
+                backdrop = Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
+                shelfPoster = shelfBackdrop,
+                shelfShow = { shelfProgress },
+                frosted = Wallpapers.frosted.takeIf { Wallpapers.backdrop != null },
                 plate = plate,
                 scroll = { scroll.value },
                 collapse = collapsePx,
