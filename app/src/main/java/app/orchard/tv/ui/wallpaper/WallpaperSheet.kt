@@ -590,6 +590,7 @@ private fun ScreensaverChoice(onStart: () -> Unit) {
             ScreensaverMode.Aerial to R.string.ss_aerial,
             ScreensaverMode.Photos to R.string.ss_photos,
             ScreensaverMode.Clock to R.string.ss_clock,
+            ScreensaverMode.Dvd to R.string.ss_dvd,
             ScreensaverMode.Videos to R.string.ss_videos,
             ScreensaverMode.System to R.string.ss_system,
         ).forEach { (mode, label) ->
