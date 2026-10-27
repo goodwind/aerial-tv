@@ -1,11 +1,11 @@
 # Installing Aerial (for AI agents)
 
-You are helping the user install Aerial (an open-source home screen for Android TV, https://github.com/pengchujin/aerial-tv) on their TV and make it the home screen the TV starts into. Everything goes through adb on the user's computer; the TV doesn't need root.
+You are helping the user install Aerial (an open-source home screen for Android TV, https://github.com/pengchujin/aerial-tv) on their TV and make it the home screen the TV starts into. Android 5.0 and later get the full app, Android 4.0-4.4 get Aerial Lite, decided by the Android version in step 2½. Everything goes through adb on the user's computer; the TV doesn't need root.
 
 ## Rules
 
-1. **Run the commands yourself on the user's computer.** Don't just list steps for the user. If you can't run commands (for example, you are a phone or web chat), say so and ask the user to switch to a desktop agent that can (Claude Code, Codex, Cursor, WorkBuddy, Trae and similar), and to allow it to run commands and use the network the first time it asks.
-2. **Don't claim success you haven't seen.** Read the real output of every command, and finish with "Check" below, pasting the raw output to the user.
+1. **Run the commands yourself on the user's computer.** Don't just list steps for the user. If you can't run commands (for example, you are a phone or web chat, including Doubao on a phone), say so and ask the user to switch to a desktop agent that can (Doubao for desktop or Doubao Work, WorkBuddy, Qwen for desktop, Claude Code, Codex, Cursor, Trae and similar), and to allow it to run commands and use the network the first time it asks.
+2. **Don't claim success you haven't seen.** Read the real output of every command, and finish with "Check" below, pasting the raw output to the user, including the home screen `resolve-activity` finds and what `enabled_accessibility_services` contains. Without those outputs, don't say it is installed.
 3. **Don't uninstall or disable any system app** (including the TV's own launcher), don't delete any file on the TV, and don't factory-reset it. The only file you may delete is `/sdcard/Download/Aerial.apk`, if this install created it.
 4. Ask the user before rebooting the TV (`adb reboot`).
 5. When the user has to do something on the TV (allow debugging, accept an install), tell them exactly which remote buttons to press.
@@ -39,19 +39,40 @@ adb devices
 
 The TV is connected once `adb devices` lists it as `device`.
 
-- **`unauthorized`**: the TV is asking "Allow USB debugging?". Ask the user to choose Allow and check Always allow, then run `adb devices` again.
+- **`unauthorized`**: the TV is asking "Allow USB debugging?". Ask the user to choose Allow and check Always allow, then run `adb devices` again. Android 4.0-4.2.1 has no such prompt; don't wait for it.
 - **`failed to connect`, `Connection refused` or a timeout**: ADB debugging is off on the TV, or the IP is wrong. Ask the user to turn it on as below, then try again. Menus on Chinese firmware are in Chinese, so their names are in brackets.
 
 | TV | How to turn on ADB |
 |---|---|
 | Xiaomi / Redmi | Settings (设置) → About (关于) → press OK on **Model** (产品型号) until it says developer mode is on. Then Settings → Account & Security (账号与安全): turn on **ADB debugging** (ADB 调试) and **Install unknown apps** (安装未知来源的应用) |
 | TCL / FFALCON | Settings (设置) → About (关于) → **Device info** (本机信息), then press **Up, Down, Left, Right**, less than a second apart. A **More** (更多) group appears at the bottom; turn on **ADB** there |
+| OPPO TVs (S1 included) | Settings (设置) → System (系统) → About (关于本机) → **Model** (设备型号), press **Up, Up, Right, Right**, then OK. Then Settings → System → **Developer options** (开发者选项) and turn on **USB debugging** (USB 调试, sometimes called ADB debugging). From user reports; verified on the ColorOS TV in OPPO K9 |
 | Haier / MOOKA | Press the **Input/Source button on the TV itself**; while the source menu is open, press **Left, Left, Up, Right** on the remote. In the factory menu (海尔工厂菜单) set **ADB 调试开关** (ADB debugging) to on (some models: second page, Other Option → adb debug). Change nothing else, and never pick 工厂复位 (factory reset). (User reports, e.g. MOOKA U65H3; not verified) |
 | Android TV / Google TV, Sony, Hisense and others | Settings → Device Preferences → About → press **Build** 7 times (not Android version, which shows an Easter egg; press Back to leave it), then turn on **USB debugging** in Developer options (sometimes called Network debugging) |
 
-The TV's IP address is usually under Settings → Network or About.
+The TV's IP address is usually under Settings → Network → the connected network (at the bottom of that page on OPPO S1).
+
+**TVs that cannot open ADB**: XGIMI H3, old LeTV sets, Honor Vision, old Konka models (no version number to tap) and similar. There is no way yet; tell the user it is not supported and don't keep trying.
+
+**Users without a computer**: some users installed Aerial with the phone apps 甲壳虫 ADB 助手 (Beetle ADB) and 超级小爱 (Super Xiaoai); we have not tested each one. They can follow steps 2 and 3 here on a phone (phone ADB tools usually can't run every command); once installed, run "Check" again from a computer or an agent where possible.
+
+## Step 2½: Check the Android version (required)
+
+```
+adb shell getprop ro.build.version.sdk
+adb shell getprop ro.build.version.release
+```
+
+Aerial comes in two builds. **Pick by the first number and install only that one**:
+
+- **21 or higher** (Android 5.0+): the full Aerial (package `app.orchard.tv`); go on to step 3. **Don't install `aerial-lite.apk`**: Android won't stop it, but it adds a second home-screen candidate and the TV may drop its current default launcher.
+- **14 to 20** (Android 4.0-4.4): Aerial Lite (package `app.orchard.tv.lite`). **Skip step 3 and "Check"** and follow "Android 4.0-4.4: Aerial Lite" below instead. The full app can't be installed on these TVs (`INSTALL_FAILED_OLDER_SDK`).
+- **Below 14** (Android 3.x or older): not supported; tell the user.
+- **No output, or an error**: find out why first (is the connection still there, does `adb devices` say `device`); don't guess the version.
 
 ## Step 3: Install
+
+This step and "Check" are for Android 5.0 and later only.
 
 ### macOS / Linux: one command
 
@@ -79,7 +100,7 @@ Run these in PowerShell, with the adb from step 1. Everything inside `adb shell 
 2. Install it: `adb install -r aerial-standard.apk`. Go on when it prints `Success`. If it fails:
    - With **`INSTALL_FAILED_VERIFICATION_FAILURE`**: this is a TCL, which refuses every adb install. Follow "TCL" below, then continue from item 3.
    - With **`INSTALL_FAILED_USER_RESTRICTED`** (Skyworth and others): see the Skyworth entry under "Common cases", then install again.
-   - Otherwise (for example, the firmware refuses home-screen apps): install `aerial-guard.apk` instead (same address with `guard` in place of `standard`).
+   - Otherwise (for example, the firmware refuses home-screen apps; OPPO TVs print `INSTALL_FAILED_DUPLICATE_PERMISSION: App installation is banned, because of launcher categories`): install `aerial-guard.apk` instead (same address with `guard` in place of `standard`).
 
 3. Grant the permissions only adb can grant. If one fails, go on with the next:
    ```
@@ -88,12 +109,19 @@ Run these in PowerShell, with the adb from step 1. Everything inside `adb shell 
    adb shell appops set app.orchard.tv SYSTEM_ALERT_WINDOW allow
    adb shell appops set app.orchard.tv WRITE_SETTINGS allow
    adb shell appops set app.orchard.tv REQUEST_INSTALL_PACKAGES allow
+   adb shell appops set app.orchard.tv GET_USAGE_STATS allow
+   adb shell appops set app.orchard.tv android:get_usage_stats allow
    adb shell cmd notification allow_listener app.orchard.tv/app.orchard.tv.guard.RevivalListener
    adb shell appops set app.orchard.tv APP_AUTO_START allow
    adb shell appops set app.orchard.tv APP_ASSOC_START allow
+   ```
+   The two `APP_*` app ops exist only on TCL; elsewhere they fail, which is fine.
+
+   Start Aerial once, wait 5 seconds, then compile it (takes up to a minute and makes Aerial run smoothly on the TV; on some TVs the compile only works after Aerial has started once):
+   ```
+   adb shell am start -W -n app.orchard.tv/.MainActivity
    adb shell cmd package compile -m speed -f app.orchard.tv
    ```
-   The two `APP_*` app ops exist only on TCL; elsewhere they fail, which is fine. `compile` takes up to a minute and makes Aerial run smoothly on the TV.
 
 4. Screensaver: run `adb shell settings get secure screensaver_enabled`. If it prints `1`, also run:
    ```
@@ -147,28 +175,66 @@ After the last command, ask the user to answer the prompt in the top-right corne
 
 If the TV has no 多屏互动: `adb push Aerial.apk /sdcard/Download/Aerial.apk`, then ask the user to open it with a file manager or the Dangbei store's local install (本地安装) on the TV.
 
+## Android 4.0-4.4: Aerial Lite
+
+Only when the number from step 2½ is 14 to 20. Lite is at its first release (1.0), a beta, not yet tested on a real 4.x TV; tell the user so. It has **no Home Guard**: Home goes through Android's "which app" chooser, where the user picks it once with Always; where the firmware keeps Home for its own launcher, Lite can only be opened from the app list, and you must not call that a takeover. A 4.x shell usually has no `grep`, so filter on the computer (`grep` on macOS / Linux, `findstr` on Windows).
+
+**macOS / Linux**: the same command as the full app; the script sees 4.x and installs Lite by itself:
+
+```bash
+curl -fsSL https://aerial.qust.me/install.sh | TV=<IP> bash
+```
+
+**Windows**, one at a time:
+
+```powershell
+curl.exe -fL -o aerial-lite.apk https://aerial.qust.me/download/aerial-lite.apk
+adb install -r aerial-lite.apk
+adb shell pm grant app.orchard.tv.lite android.permission.WRITE_SECURE_SETTINGS
+adb shell am start -n app.orchard.tv.lite/.HomeActivity
+```
+
+If the site's download fails, use `https://github.com/pengchujin/aerial-tv/releases/latest/download/aerial-lite.apk`. `adb install` must print `Success`. The third line is for the brightness slider; Android 4.0 refuses it, which is fine.
+
+**Make it the home screen**: Android 4.x has no command for this. Ask the user to **press Home on the remote**; when Android asks which app to use, choose **Aerial Lite**, then **Always** (some systems say "Set as default").
+
+**Check (required)**; paste the raw output to the user:
+
+```
+adb shell dumpsys package app.orchard.tv.lite | grep versionName
+adb shell input keyevent 3
+adb shell "sleep 5; dumpsys window" | grep mCurrentFocus
+```
+
+(On Windows use `findstr` instead of `grep`.) Line 1 has `versionName`: installed. Line 3 contains `app.orchard.tv.lite`: Home opens Lite, done. If line 3 shows the old launcher or the chooser, ask the user to press Home once on the physical remote and pick Always, then run line 3 again; if it still isn't Lite, tell the user plainly that this firmware won't let another app be the home screen and Lite opens from the app list.
+
+**Undo**: on the TV, Settings → Apps → Aerial Lite → **Clear defaults**; to remove it, `adb uninstall app.orchard.tv.lite`.
+
 ## Check (required)
 
 Run each of these and paste the **raw output** to the user:
 
 ```
 adb shell "dumpsys package app.orchard.tv | grep versionName"
+adb shell "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME"
 adb shell settings get secure enabled_accessibility_services
 adb shell "dumpsys accessibility | grep -c -E 'label=(Aerial|app.orchard.tv)'"
 adb shell input keyevent KEYCODE_HOME
-adb shell "sleep 3; dumpsys window | grep mCurrentFocus"
+adb shell "sleep 8; dumpsys window | grep mCurrentFocus"
 ```
 
 - Line 1 shows a `versionName`: installed.
-- Line 2 includes `app.orchard.tv/app.orchard.tv.guard.HomeGuardService`: Home Guard is on. (On stock Android TV, where Aerial is already the default home screen, it may not be; line 5 decides.)
-- Line 3 is above 0: Home Guard is running.
-- **Line 5 includes `app.orchard.tv`: Home leads to Aerial and the install worked.** Don't tell the user it's installed until it does.
+- Line 2 is the home screen the system resolves to. It is fine for Xiaomi to still name PatchWall (`com.mitv.tvhome`) or TCL its own launcher; Home Guard takes over. `app.orchard.tv` is better still.
+- Line 3 includes `app.orchard.tv/app.orchard.tv.guard.HomeGuardService`: Home Guard is on. (On stock Android TV, where Aerial is already the default home screen, it may not be; line 6 decides.)
+- Line 4 is above 0: Home Guard is running.
+- **Line 6 includes `app.orchard.tv`: Home leads to Aerial and the install worked.** Don't tell the user it's installed until it does. On some firmwares the stock launcher stays a few seconds after Home before Home Guard brings Aerial back (about 5 s on OPPO ColorOS TV, #664): if line 6 shows the stock launcher, run `adb shell "sleep 5; dumpsys window | grep mCurrentFocus"` once more, and only call it a failure when neither shows `app.orchard.tv`.
+- Paste the raw output of lines 2, 3 and 6 to the user, not just "success". If line 2 errors on an old system without `cmd`, run `adb shell pm resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME` instead.
 
-If line 5 shows something else, wait 5 seconds and run lines 4 and 5 again (Home Guard starts slowly on some TVs). If it still does, see "Common cases".
+If line 6 shows something else, wait 5 seconds and run lines 5 and 6 again (Home Guard starts slowly on some TVs). If it still does, see "Common cases".
 
-A Home press sent with `input keyevent` skips Home Guard's key filter, so on a few TVs (Sony, Android 9) it lands somewhere else than the remote's Home button does. Then ask the user to press Home on the remote once and run only line 5; that result counts.
+A Home press sent with `input keyevent` skips Home Guard's key filter, so on a few TVs (Sony, Android 9) it lands somewhere else than the remote's Home button does. Then ask the user to press Home on the remote once and run only line 6; that result counts.
 
-Once all of it passes, ask the user before running `adb reboot`. After the TV has started again (a minute or two), `adb connect <IP>:5555` and run line 5 again to confirm the TV starts into Aerial.
+Once all of it passes, ask the user before running `adb reboot`. After the TV has started again (a minute or two), `adb connect <IP>:5555` and run line 6 again to confirm the TV starts into Aerial.
 
 ## Undo
 
@@ -211,17 +277,18 @@ Then:
 - **TVs with only Wireless debugging** (FFALCON 55S595C Ultra, MT9655): adb can't be authorized there, so Aerial installs but can't take over Home.
 - **Hisense VIDAA**: once item 7 has changed `persist.vt.use_home_pkg`, Home goes straight to Aerial; the TV still starts into its own launcher after a reboot (the firmware holds third-party apps back until boot completes), so press Home once.
 - **Other Vidda systems, OPPO K9, FFALCON Crane 6**: Aerial installs but the TV doesn't start into it (the firmware only accepts its own launcher unless that is removed, which this install doesn't do). Aerial still works as an app.
-- **Check line 3 is 0 but line 2 lists Aerial**: common right after an update, when the system still looks in the old install directory (Xiaomi, Android 9, #72). Run `adb shell am force-stop app.orchard.tv`, wait 3 seconds, run `adb shell am start -W -n app.orchard.tv/.MainActivity`, and check again. On macOS / Linux, `curl -fsSL https://aerial.qust.me/install.sh | TV=<IP> bash -s repair` does the same.
+- **Check line 4 is 0 but line 3 lists Aerial**: common right after an update, when the system still looks in the old install directory (Xiaomi, Android 9, #72). Run `adb shell am force-stop app.orchard.tv`, wait 3 seconds, run `adb shell am start -W -n app.orchard.tv/.MainActivity`, and check again. On macOS / Linux, `curl -fsSL https://aerial.qust.me/install.sh | TV=<IP> bash -s repair` does the same.
 - **Home opens the TV's own launcher again after a while**: try the same stop-and-open first.
-- **Check line 3 is 0 and line 2 does not list Aerial**: some firmwares block sideloaded accessibility services. Ask the user to allow Aerial's autostart and accessibility in the TV's security or permissions app, then run `adb shell am start -n app.orchard.tv/.MainActivity` and check again.
+- **Check line 4 is 0 and line 3 does not list Aerial**: some firmwares block sideloaded accessibility services. Ask the user to allow Aerial's autostart and accessibility in the TV's security or permissions app, then run `adb shell am start -n app.orchard.tv/.MainActivity` and check again.
 - **Forgot the parental PIN**: `adb shell am broadcast -a app.orchard.tv.CONFIG -n app.orchard.tv/.guard.ConfigReceiver --ez clear_pin true` turns it off.
-- **Not supported**: LG webOS, Samsung Tizen, Huawei Vision (HarmonyOS), and Android 4.4 or older.
+- **Not supported**: LG webOS, Samsung Tizen, Huawei Vision (HarmonyOS), and Android 3.x or older (Android 4.0-4.4 gets Aerial Lite, above). TVs that cannot open ADB, such as XGIMI H3, old LeTV sets, Honor Vision and old Konka models (no version number to tap), can't be used yet.
 
 ## What users ask
 
-- **Do my apps and subscriptions stay?** Yes. Aerial only replaces the home screen; apps, accounts and memberships are unchanged, and open from Aerial.
-- **Can I still use the old home screen?** Yes. It stays in Aerial's app list (including Xiaomi's PatchWall) and opens as before, with its recommendations.
+- **Do my apps and subscriptions stay?** Yes. Aerial only replaces the home screen; apps, accounts and memberships are unchanged, and open from Aerial. Xiaomi / TCL subscriptions, Xiaoai, the Xiaomi account and cable TV are unaffected.
+- **Can I still use the old home screen?** Yes. It stays in Aerial's app list (including Xiaomi's PatchWall, opened from the 桌面 tile) and opens as before, with its recommendations. Xiaomi Video and PatchWall content are still there.
 - **Can it remove the boot ad?** No. The firmware plays it before Aerial starts.
 - **How do I update later?** From 1.32, when Control Center shows New Version, choose Download and Install and confirm in the system installer (checked on Xiaomi). On TVs that do not let apps install apps, run the same install command again (on Windows, repeat items 1, 2, 3 and 6 of step 3); every setting is kept.
+- **Installed, but something is off (Home, standby, boot, inputs, brightness)**: follow https://aerial.qust.me/en/adapt.md to adapt Aerial to this TV: self-test, fix what can be fixed on the TV, write up the rest.
 - **Something is wrong on the TV and the user wants to report it**: on macOS / Linux run `curl -fsSL https://aerial.qust.me/tools/report.sh | TV=<IP> bash`. It only reads, and writes `aerial-report-<model>.md`; read it, then paste it into https://github.com/pengchujin/aerial-tv/issues/new?template=device.yml . Without a computer: scan the QR code in Personalize and use 反馈问题 (Report a problem) at the bottom of the phone page to copy the diagnostics.
 - **Where do I report problems?** https://github.com/pengchujin/aerial-tv/issues, with the TV model (`adb shell getprop ro.product.model`) and the install output.
