@@ -852,7 +852,7 @@ fun HomeScreen(
                     slot = { metrics.slot(it, onTop = true) },
                     tileW = metrics.tileW,
                     plateV = PlatePadV,
-                    fade = { scrolledAway(scroll.value, collapsePx) },
+                    fade = { scrolledAway(scroll.value, collapsePx) * (1f - (toSaver.value * 2f).coerceIn(0f, 1f)) },
                     onTap = { runCatching { shelfRequester.requestFocus() } },
                 )
 
@@ -881,7 +881,8 @@ fun HomeScreen(
                                     val p = shelfProgress.coerceIn(0f, 1f)
                                     // Rises with the plate when Home lifts for the second row.
                                     translationY = (if (roomAbove) -(heroY - heroUp).toPx() * p else 0f) - lift()
-                                    alpha = (1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)) * if (roomAbove) 1f else 1f - p
+                                    alpha = (1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)) * (if (roomAbove) 1f else 1f - p) *
+                                        (1f - (toSaver.value * 2f).coerceIn(0f, 1f))
                                 },
                         )
                     }
