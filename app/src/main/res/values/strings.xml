@@ -276,4 +276,6 @@
     <string name="ss_show_time">Time</string>
     <string name="ss_show_time_hint">The time over the aerial and photo screensavers. The time and place name move a little now and then, so nothing stays on the same pixels.</string>
     <string name="st_tab_system">System</string>
+    <string name="ms_all">All</string>
+    <string name="ms_done">Done</string>
 </resources>

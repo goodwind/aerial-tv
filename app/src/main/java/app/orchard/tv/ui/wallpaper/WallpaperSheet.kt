@@ -202,7 +202,15 @@ fun WallpaperSheet(
                                 SectionTitle(R.string.wp_mix)
                                 val now = Mix.current?.let { w -> listOfNotNull(w.title, w.caption).joinToString(" — ") }
                                 Group(now?.let { stringResource(R.string.wp_mix_now, it) }) { note ->
-                                    SettingRow(R.string.wp_mix_sources, null, note, first = true) {
+                                    val sourceOptions = listOf(
+                                        MixSource.Bing to stringResource(R.string.wp_mix_source_bing),
+                                        MixSource.Commons to stringResource(R.string.wp_mix_source_commons),
+                                        MixSource.Nasa to stringResource(R.string.wp_mix_source_nasa),
+                                    )
+                                    SettingRow(
+                                        R.string.wp_mix_sources, null, note, first = true,
+                                        compact = { MultiDropdownChoice(sourceOptions, AerialSettings.mixSources, AerialSettings::toggleMixSource) },
+                                    ) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             listOf(
                                                 MixSource.Bing to R.string.wp_mix_source_bing,
@@ -214,7 +222,20 @@ fun WallpaperSheet(
                                         }
                                     }
                                     // Unsplash needs the owner's key, which is given on the phone page.
-                                    SettingRow(R.string.wp_mix_more, if (AerialSettings.unsplashKey.isBlank()) stringResource(R.string.wp_mix_unsplash_hint) else null, note) {
+                                    val moreOptions = listOf(
+                                        MixSource.Unsplash to stringResource(R.string.wp_mix_source_unsplash),
+                                        MixSource.Mine to stringResource(R.string.wp_mix_source_mine),
+                                    )
+                                    SettingRow(
+                                        R.string.wp_mix_more, if (AerialSettings.unsplashKey.isBlank()) stringResource(R.string.wp_mix_unsplash_hint) else null, note,
+                                        compact = {
+                                            MultiDropdownChoice(
+                                                moreOptions,
+                                                AerialSettings.mixSources.filter { it != MixSource.Unsplash || AerialSettings.unsplashKey.isNotBlank() }.toSet(),
+                                                // As the chip: Unsplash does nothing without the owner's key.
+                                            ) { if (it != MixSource.Unsplash || AerialSettings.unsplashKey.isNotBlank()) AerialSettings.toggleMixSource(it) }
+                                        },
+                                    ) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             Chip(
                                                 stringResource(R.string.wp_mix_source_unsplash),
@@ -225,7 +246,17 @@ fun WallpaperSheet(
                                             }
                                         }
                                     }
-                                    SettingRow(R.string.wp_mix_themes, stringResource(R.string.wp_mix_themes_hint), note) {
+                                    val themeOptions = listOf(
+                                        MixTheme.Nature to stringResource(R.string.wp_mix_theme_nature),
+                                        MixTheme.City to stringResource(R.string.wp_mix_theme_city),
+                                        MixTheme.Mountains to stringResource(R.string.wp_mix_theme_mountains),
+                                        MixTheme.Space to stringResource(R.string.wp_mix_theme_space),
+                                        MixTheme.Sea to stringResource(R.string.wp_mix_theme_sea),
+                                    )
+                                    SettingRow(
+                                        R.string.wp_mix_themes, stringResource(R.string.wp_mix_themes_hint), note,
+                                        compact = { MultiDropdownChoice(themeOptions, AerialSettings.mixThemes, AerialSettings::toggleMixTheme) },
+                                    ) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             listOf(
                                                 MixTheme.Nature to R.string.wp_mix_theme_nature,
@@ -783,9 +814,42 @@ private fun <T> Choices(
 @Composable
 private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choose: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val shown = options.firstOrNull { it.first == current }?.second.orEmpty()
+    DropdownPill(options.firstOrNull { it.first == current }?.second.orEmpty()) { open = true }
+    if (open) {
+        DropdownList(
+            options, isOn = { it == current }, start = (options.firstOrNull { it.first == current } ?: options.first()).first,
+            done = null, onDismiss = { open = false },
+        ) { choose(it); open = false }
+    }
+}
+
+/**
+ * The same for a setting that takes several of its options at once: the pill says which ([multiSummary]),
+ * OK on an option turns it on or off and the list stays open, so that several can be turned in a row;
+ * Done or Back closes it. Each change is made at once.
+ */
+@Composable
+private fun <T> MultiDropdownChoice(options: List<Pair<T, String>>, selected: Set<T>, toggle: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val all = stringResource(R.string.ms_all)
+    DropdownPill(multiSummary(options.filter { it.first in selected }.map { it.second }, options.size, all)) { open = true }
+    if (open) {
+        DropdownList(options, isOn = { it in selected }, start = options.first().first, done = stringResource(R.string.ms_done), onDismiss = { open = false }, onPick = toggle)
+    }
+}
+
+/** What the pill of a [MultiDropdownChoice] says: all of them (also when none is chosen: none means everything), the names of up to [maxNames], or the first of them and how many more. */
+internal fun multiSummary(selected: List<String>, total: Int, all: String, maxNames: Int = 2): String = when {
+    selected.isEmpty() || selected.size >= total -> all
+    selected.size <= maxNames -> selected.joinToString(", ")
+    else -> selected.take(maxNames).joinToString(", ") + " +${selected.size - maxNames}"
+}
+
+/** The pill: [text] and a chevron down, white when focused. */
+@Composable
+private fun DropdownPill(text: String, onOpen: () -> Unit) {
     Box {
-        Pressable(onClick = { open = true }, focusedScale = 1.06f) { state ->
+        Pressable(onClick = onOpen, focusedScale = 1.06f) { state ->
             val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "drop-bg")
             val fg = if (state.focused) Palette.OnFocus else Palette.Label
             Row(
@@ -793,22 +857,30 @@ private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choos
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                BasicText(shown, style = Type.Body.copy(color = fg))
+                BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
                 GlyphIcon(Glyph.ChevronRight, fg, 18.dp, Modifier.rotate(90f))
             }
         }
-        if (open) DropdownList(options, current, onDismiss = { open = false }) { choose(it); open = false }
     }
 }
 
-/** The list of options under its pill; focus starts on the chosen one. */
+/**
+ * The list of options under its pill; focus starts on [start]. A check marks the options that are
+ * [isOn]. With [done] there is a last row of that name that closes the list.
+ */
 @Composable
-private fun <T> DropdownList(options: List<Pair<T, String>>, current: T, onDismiss: () -> Unit, onPick: (T) -> Unit) {
-    val start = remember { FocusRequester() }
-    val startValue = (options.firstOrNull { it.first == current } ?: options.first()).first
+private fun <T> DropdownList(
+    options: List<Pair<T, String>>,
+    isOn: (T) -> Boolean,
+    start: T,
+    done: String?,
+    onDismiss: () -> Unit,
+    onPick: (T) -> Unit,
+) {
+    val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        runCatching { start.requestFocus() }
+        runCatching { first.requestFocus() }
     }
     Popup(popupPositionProvider = BelowThePill, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
         Column(
@@ -816,27 +888,33 @@ private fun <T> DropdownList(options: List<Pair<T, String>>, current: T, onDismi
                 // As wide as its longest option, not as the window: the rows fill their column.
                 .widthIn(min = 200.dp, max = 420.dp)
                 .width(IntrinsicSize.Max)
-                .heightIn(max = 300.dp)
+                .heightIn(max = 340.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xF22C2C2E))
                 .verticalScroll(rememberScrollState())
                 .padding(8.dp),
         ) {
             options.forEach { (value, text) ->
-                Pressable(onClick = { onPick(value) }, focusRequester = if (value == startValue) start else null, focusedScale = 1f) { state ->
-                    val bg by animateColorAsState(if (state.focused) Palette.Focus else Color.Transparent, tween(120, easing = Motion.EaseOut), label = "drop-item")
-                    val fg = if (state.focused) Palette.OnFocus else Palette.Label
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).height(44.dp).padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        // The check's room is kept on every row, so the names line up.
-                        Box(Modifier.size(14.dp)) { if (value == current) GlyphIcon(Glyph.Check, fg, 14.dp) }
-                        BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
-                    }
-                }
+                DropdownRow(text, on = isOn(value), focusRequester = if (value == start) first else null) { onPick(value) }
             }
+            if (done != null) DropdownRow(done, on = false, focusRequester = null, onClick = onDismiss)
+        }
+    }
+}
+
+@Composable
+private fun DropdownRow(text: String, on: Boolean, focusRequester: FocusRequester?, onClick: () -> Unit) {
+    Pressable(onClick = onClick, focusRequester = focusRequester, focusedScale = 1f) { state ->
+        val bg by animateColorAsState(if (state.focused) Palette.Focus else Color.Transparent, tween(120, easing = Motion.EaseOut), label = "drop-item")
+        val fg = if (state.focused) Palette.OnFocus else Palette.Label
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).height(44.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // The check's room is kept on every row, so the names line up.
+            Box(Modifier.size(14.dp)) { if (on) GlyphIcon(Glyph.Check, fg, 14.dp) }
+            BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
         }
     }
 }

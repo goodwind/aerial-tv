@@ -275,4 +275,6 @@
     <string name="ss_show_time">时间</string>
     <string name="ss_show_time_hint">航拍和照片屏保上的时间。时间和地名会不时挪一点位置，避免烧屏。</string>
     <string name="st_tab_system">系统</string>
+    <string name="ms_all">全部</string>
+    <string name="ms_done">完成</string>
 </resources>

@@ -268,4 +268,6 @@
     <string name="ss_show_time">Уақыт</string>
     <string name="ss_show_time_hint">Аэрожиын және фото экран қорғауыштарындағы уақыт. Экран күйіп қалмас үшін уақыт пен орын атауы анда-санда сәл жылжиды.</string>
     <string name="st_tab_system">Жүйе</string>
+    <string name="ms_all">Барлығы</string>
+    <string name="ms_done">Дайын</string>
 </resources>
