@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -682,7 +683,9 @@ private fun <T> DropdownList(options: List<Pair<T, String>>, current: T, onDismi
     Popup(popupPositionProvider = BelowThePill, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
         Column(
             Modifier
-                .widthIn(min = 200.dp)
+                // As wide as its longest option, not as the window: the rows fill their column.
+                .widthIn(min = 200.dp, max = 420.dp)
+                .width(IntrinsicSize.Max)
                 .heightIn(max = 300.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xF22C2C2E))
