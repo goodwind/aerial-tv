@@ -196,57 +196,60 @@ fun WallpaperSheet(
                                 )
                             }
 
-                            Spacer(Modifier.height(6.dp))
-                            SectionTitle(R.string.wp_mix)
-                            val now = Mix.current?.let { w -> listOfNotNull(w.title, w.caption).joinToString(" — ") }
-                            Group(now?.let { stringResource(R.string.wp_mix_now, it) }) { note ->
-                                SettingRow(R.string.wp_mix_sources, null, note, first = true) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        listOf(
-                                            MixSource.Bing to R.string.wp_mix_source_bing,
-                                            MixSource.Commons to R.string.wp_mix_source_commons,
-                                            MixSource.Nasa to R.string.wp_mix_source_nasa,
-                                        ).forEach { (source, label) ->
-                                            Chip(stringResource(label), on = source in AerialSettings.mixSources) { AerialSettings.toggleMixSource(source) }
+                            // The auto wallpaper's sources, themes and interval are its own: shown while it is the wallpaper.
+                            if (Wallpapers.selectedId == Wallpapers.MIX) {
+                                Spacer(Modifier.height(6.dp))
+                                SectionTitle(R.string.wp_mix)
+                                val now = Mix.current?.let { w -> listOfNotNull(w.title, w.caption).joinToString(" — ") }
+                                Group(now?.let { stringResource(R.string.wp_mix_now, it) }) { note ->
+                                    SettingRow(R.string.wp_mix_sources, null, note, first = true) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            listOf(
+                                                MixSource.Bing to R.string.wp_mix_source_bing,
+                                                MixSource.Commons to R.string.wp_mix_source_commons,
+                                                MixSource.Nasa to R.string.wp_mix_source_nasa,
+                                            ).forEach { (source, label) ->
+                                                Chip(stringResource(label), on = source in AerialSettings.mixSources) { AerialSettings.toggleMixSource(source) }
+                                            }
                                         }
                                     }
-                                }
-                                // Unsplash needs the owner's key, which is given on the phone page.
-                                SettingRow(R.string.wp_mix_more, if (AerialSettings.unsplashKey.isBlank()) stringResource(R.string.wp_mix_unsplash_hint) else null, note) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Chip(
-                                            stringResource(R.string.wp_mix_source_unsplash),
-                                            on = MixSource.Unsplash in AerialSettings.mixSources && AerialSettings.unsplashKey.isNotBlank(),
-                                        ) { if (AerialSettings.unsplashKey.isNotBlank()) AerialSettings.toggleMixSource(MixSource.Unsplash) }
-                                        Chip(stringResource(R.string.wp_mix_source_mine), on = MixSource.Mine in AerialSettings.mixSources) {
-                                            AerialSettings.toggleMixSource(MixSource.Mine)
+                                    // Unsplash needs the owner's key, which is given on the phone page.
+                                    SettingRow(R.string.wp_mix_more, if (AerialSettings.unsplashKey.isBlank()) stringResource(R.string.wp_mix_unsplash_hint) else null, note) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Chip(
+                                                stringResource(R.string.wp_mix_source_unsplash),
+                                                on = MixSource.Unsplash in AerialSettings.mixSources && AerialSettings.unsplashKey.isNotBlank(),
+                                            ) { if (AerialSettings.unsplashKey.isNotBlank()) AerialSettings.toggleMixSource(MixSource.Unsplash) }
+                                            Chip(stringResource(R.string.wp_mix_source_mine), on = MixSource.Mine in AerialSettings.mixSources) {
+                                                AerialSettings.toggleMixSource(MixSource.Mine)
+                                            }
                                         }
                                     }
-                                }
-                                SettingRow(R.string.wp_mix_themes, stringResource(R.string.wp_mix_themes_hint), note) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        listOf(
-                                            MixTheme.Nature to R.string.wp_mix_theme_nature,
-                                            MixTheme.City to R.string.wp_mix_theme_city,
-                                            MixTheme.Mountains to R.string.wp_mix_theme_mountains,
-                                            MixTheme.Space to R.string.wp_mix_theme_space,
-                                            MixTheme.Sea to R.string.wp_mix_theme_sea,
-                                        ).forEach { (theme, label) ->
-                                            Chip(stringResource(label), on = theme in AerialSettings.mixThemes) { AerialSettings.toggleMixTheme(theme) }
+                                    SettingRow(R.string.wp_mix_themes, stringResource(R.string.wp_mix_themes_hint), note) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            listOf(
+                                                MixTheme.Nature to R.string.wp_mix_theme_nature,
+                                                MixTheme.City to R.string.wp_mix_theme_city,
+                                                MixTheme.Mountains to R.string.wp_mix_theme_mountains,
+                                                MixTheme.Space to R.string.wp_mix_theme_space,
+                                                MixTheme.Sea to R.string.wp_mix_theme_sea,
+                                            ).forEach { (theme, label) ->
+                                                Chip(stringResource(label), on = theme in AerialSettings.mixThemes) { AerialSettings.toggleMixTheme(theme) }
+                                            }
                                         }
                                     }
+                                    Choices(
+                                        R.string.wp_mix_every, null, note,
+                                        AerialSettings.mixMinutesChoices.map { minutes ->
+                                            minutes to when (minutes) {
+                                                60 -> stringResource(R.string.wp_mix_hour)
+                                                1440 -> stringResource(R.string.wp_mix_day)
+                                                else -> stringResource(R.string.ss_minutes, minutes)
+                                            }
+                                        },
+                                        AerialSettings.mixMinutes, AerialSettings::chooseMixMinutes,
+                                    )
                                 }
-                                Choices(
-                                    R.string.wp_mix_every, null, note,
-                                    AerialSettings.mixMinutesChoices.map { minutes ->
-                                        minutes to when (minutes) {
-                                            60 -> stringResource(R.string.wp_mix_hour)
-                                            1440 -> stringResource(R.string.wp_mix_day)
-                                            else -> stringResource(R.string.ss_minutes, minutes)
-                                        }
-                                    },
-                                    AerialSettings.mixMinutes, AerialSettings::chooseMixMinutes,
-                                )
                             }
 
                         }
