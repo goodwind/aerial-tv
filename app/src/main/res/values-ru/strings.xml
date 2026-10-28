@@ -25,9 +25,6 @@
     <string name="cc_setup_scan_hint">Отсканируйте телефоном, чтобы получить команду для этого телевизора и подсказку для ИИ-агента.</string>
     <string name="cc_back">Назад</string>
     <string name="cc_no_inputs">На этом телевизоре нет источников сигнала</string>
-    <string name="net_ethernet">Ethernet</string>
-    <string name="net_wifi">Wi-Fi</string>
-    <string name="net_offline">Нет подключения</string>
     <string name="input_connected">Подключено</string>
     <string name="input_live_tv">Эфирное ТВ</string>
     <string name="input_antenna">Антенна</string>

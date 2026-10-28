@@ -25,9 +25,6 @@
     <string name="cc_setup_scan_hint">Осы теледидарға арналған пәрмен мен жасанды интеллект агентіне арналған нұсқауды алу үшін телефонмен сканерлеңіз.</string>
     <string name="cc_back">Артқа</string>
     <string name="cc_no_inputs">Бұл теледидарда сигнал көздері табылмады</string>
-    <string name="net_ethernet">Ethernet</string>
-    <string name="net_wifi">Wi-Fi</string>
-    <string name="net_offline">Қосылмаған</string>
     <string name="input_connected">Қосылған</string>
     <string name="input_live_tv">Эфирлік ТД</string>
     <string name="input_antenna">Антенна</string>

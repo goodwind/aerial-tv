@@ -28,9 +28,6 @@
     <string name="cc_back">返回</string>
     <string name="cc_no_inputs">这台电视没有可用的信号源</string>
 
-    <string name="net_ethernet">有线网络</string>
-    <string name="net_wifi">Wi-Fi</string>
-    <string name="net_offline">未连接</string>
 
     <string name="input_connected">已连接</string>
     <string name="input_live_tv">电视直播</string>

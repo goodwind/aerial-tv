@@ -29,9 +29,6 @@
     <string name="cc_back">Back</string>
     <string name="cc_no_inputs">No inputs found on this TV</string>
 
-    <string name="net_ethernet">Ethernet</string>
-    <string name="net_wifi">Wi-Fi</string>
-    <string name="net_offline">Not Connected</string>
 
     <string name="input_connected">Connected</string>
     <string name="input_live_tv">Live TV</string>
