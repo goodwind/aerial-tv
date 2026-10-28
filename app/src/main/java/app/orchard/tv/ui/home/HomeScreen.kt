@@ -114,8 +114,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private const val COLUMNS = 5
-
 /** The plate's distance from the bottom edge with no second row peeking: as from the sides. */
 private val PlateMarginBottom = 30.dp
 
@@ -128,16 +126,28 @@ private object ControlCenterWarmed { var done = false }
 private const val CC_WARM_AFTER_MS = 3_000L
 
 private val GridMargin = 56.dp
-private val GridGap = 28.dp
+
+/** The highest the row above may sit once Home has scrolled into the grid: clear of the status pill. */
+private val RowAboveTop = 72.dp
+
+/**
+ * The gap between tiles for [columns] a row (AerialSettings.homeColumns): about a fifth of a tile,
+ * as tvOS keeps it when it fits six, so four or six look like five scaled rather than packed.
+ */
+internal fun gridGap(columns: Int): Dp = when (columns) {
+    4 -> 34.dp
+    6 -> 24.dp
+    else -> 28.dp
+}
 
 /** A tile's width at rest on a screen [screenW] wide; TileFaces works out the same size. */
-internal fun restTileWidth(screenW: Dp): Dp = (screenW - GridMargin * 2 - GridGap * (COLUMNS - 1)) / COLUMNS
+internal fun restTileWidth(screenW: Dp, columns: Int): Dp = (screenW - GridMargin * 2 - gridGap(columns) * (columns - 1)) / columns
 
 /** Grid geometry for the screen at hand. On a 1080p TV this is a 960×540 dp canvas. */
-private class GridMetrics(screenW: Dp, screenH: Dp, oneRow: Boolean, plateNames: Boolean, peek: Boolean, plate: Boolean) {
+private class GridMetrics(screenW: Dp, screenH: Dp, val columns: Int, oneRow: Boolean, plateNames: Boolean, peek: Boolean, plate: Boolean) {
     val margin = GridMargin
-    val gap = GridGap
-    val tileW = restTileWidth(screenW)
+    val gap = gridGap(columns)
+    val tileW = restTileWidth(screenW, columns)
     val tileH = tileW * 9f / 16f
     val pitchX = tileW + gap
     val pitchY = tileH + 50.dp
@@ -172,8 +182,12 @@ private class GridMetrics(screenW: Dp, screenH: Dp, oneRow: Boolean, plateNames:
      */
     val clockY = 80.dp
 
-    /** Where a row rests once you go down into the grid: the row above stays in view. */
-    val restY = screenH * 0.37f
+    /**
+     * Where a row rests once you go down into the grid: the row above stays in view, its top under
+     * the status pill (28 dp down, 34 tall). Four a row are tall enough that 37% of the screen put
+     * that row over the pill; six still rest at 37%, five some 5 dp lower.
+     */
+    val restY = maxOf(screenH * 0.37f, RowAboveTop + pitchY)
     val screenH = screenH
 
     /**
@@ -197,8 +211,8 @@ private class GridMetrics(screenW: Dp, screenH: Dp, oneRow: Boolean, plateNames:
         .coerceAtLeast(0.dp)
 
     fun slot(index: Int, onTop: Boolean): Pair<Dp, Dp> {
-        val row = index / COLUMNS
-        return Pair(margin + pitchX * (index % COLUMNS), topRowY + pitchY * row + if (row > 0 && onTop) firstGap else 0.dp)
+        val row = index / columns
+        return Pair(margin + pitchX * (index % columns), topRowY + pitchY * row + if (row > 0 && onTop) firstGap else 0.dp)
     }
 
     fun scrollFor(row: Int, rows: Int): Dp {
@@ -268,7 +282,8 @@ fun HomeScreen(
     val shelfTabs = remember { mutableStateMapOf<String, Int>() }
     fun shelfKey(pkg: String) = "$pkg#${shelfTabs[pkg] ?: 0}"
     val focusedIndex = apps.indexOfFirst { it.key == focusedKey }
-    val focusedRow = if (pillFocused || focusedIndex < 0) 0 else focusedIndex / COLUMNS
+    val columns = AerialSettings.homeColumns
+    val focusedRow = if (pillFocused || focusedIndex < 0) 0 else focusedIndex / columns
     val gridEnabled = overlay == Overlay.None
 
     // The aerial wallpaper's film, and how far it shows through.
@@ -306,16 +321,12 @@ fun HomeScreen(
     // A photo screensaver over a picture wallpaper carries the picture on the same way: its shading
     // lifts and it slowly draws in from just as Home shows it (HomeBackground), and the photos move
     // on from it.
-    // An aerial screensaver over a picture wallpaper starts the same way, its film fading in over
-    // the picture once it moves (#683).
     val stillSaver = remember(vm.screensaverVisible) {
         if (vm.screensaverVisible && focusedRow == 0 && overlay == Overlay.None && moving == null && Wallpapers.backdrop != null) {
-            Wallpapers.screensaverPicture() ?: Wallpapers.aerialSaverPicture()
+            Wallpapers.screensaverPicture()
         } else null
     }
-    val stillCarry = remember(stillSaver) {
-        stillSaver?.let { SaverCarry.Still(it, thenAerials = Wallpapers.screensaver == ScreensaverMode.Aerial) }
-    }
+    val stillCarry = remember(stillSaver) { stillSaver?.let { SaverCarry.Still(it) } }
     var saverImage by remember { mutableStateOf<ImageBitmap?>(null) }
     val saverReveal = remember { Animatable(0f) }
     val saverPush = remember { Animatable(0f) }
@@ -325,8 +336,6 @@ fun HomeScreen(
             saverImage = withContext(Dispatchers.Default) {
                 Wallpapers.picture(stillSaver, Wallpapers.screenW, Wallpapers.screenH)?.asImageBitmap()
             } ?: return@LaunchedEffect
-            stillCarry?.image = saverImage
-            stillCarry?.push = { saverPush.value }
             coroutineScope {
                 val pushing = if (reduced) null else launch { drawIn(saverPush) }
                 launch { saverReveal.animateTo(1f, tween(1800, easing = Motion.EaseInOut)) }
@@ -390,8 +399,8 @@ fun HomeScreen(
         shelf = next
     }
     // Shelves for the whole top row are read once ahead, so moving along it never waits on a query.
-    LaunchedEffect(apps.take(COLUMNS).map { it.packageName }, Shelf.version, AerialSettings.appContent) {
-        if (AerialSettings.appContent) apps.take(COLUMNS).forEach { if (it.source == null && it.folder == null) Shelf.load(it.packageName) }
+    LaunchedEffect(apps.take(columns).map { it.packageName }, Shelf.version, AerialSettings.appContent) {
+        if (AerialSettings.appContent) apps.take(columns).forEach { if (it.source == null && it.folder == null) Shelf.load(it.packageName) }
     }
     // The shelf is shown only while focus is up on it; on its app's tile an arrow says it is there.
     // The shelf stays up, unfocused, while focus is on the pill it was left for.
@@ -512,7 +521,7 @@ fun HomeScreen(
         val scrolled = dragged && scroll.value > 1f
         dragged = false
         // Handled even when that is turned off: unhandled, Back would close Home itself.
-        if (focusedRow > 0 || scrolled) focusApp(focusedIndex.coerceAtLeast(0) % COLUMNS)
+        if (focusedRow > 0 || scrolled) focusApp(focusedIndex.coerceAtLeast(0) % columns)
         else if (AerialSettings.backStartsScreensaver) onStartScreensaver()
     }
 
@@ -533,8 +542,8 @@ fun HomeScreen(
                     when (code) {
                         NativeKeyEvent.KEYCODE_DPAD_LEFT -> vm.moveBy(-1)
                         NativeKeyEvent.KEYCODE_DPAD_RIGHT -> vm.moveBy(1)
-                        NativeKeyEvent.KEYCODE_DPAD_UP -> vm.moveBy(-COLUMNS)
-                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> vm.moveBy(COLUMNS)
+                        NativeKeyEvent.KEYCODE_DPAD_UP -> vm.moveBy(-columns)
+                        NativeKeyEvent.KEYCODE_DPAD_DOWN -> vm.moveBy(columns)
                         NativeKeyEvent.KEYCODE_BACK, NativeKeyEvent.KEYCODE_DPAD_CENTER,
                         NativeKeyEvent.KEYCODE_ENTER, NativeKeyEvent.KEYCODE_NUMPAD_ENTER -> vm.endMove()
                         else -> return@onPreviewKeyEvent false
@@ -564,7 +573,7 @@ fun HomeScreen(
                 }
             },
     ) {
-        val rows = (apps.size + COLUMNS - 1) / COLUMNS
+        val rows = (apps.size + columns - 1) / columns
         // With a single row of apps the two-row layout would leave the bottom of the screen empty.
         val oneRow = AerialSettings.oneRowHome || rows <= 1
         // In two rows the second is on screen already: down to it stays on the shelf, under the
@@ -576,8 +585,8 @@ fun HomeScreen(
         val plateNames = AerialSettings.nameMode == NameMode.All && AerialSettings.homePlate
         val peek = AerialSettings.peekNextRow
         val hasPlate = AerialSettings.homePlate
-        val metrics = remember(maxWidth, maxHeight, oneRow, plateNames, peek, hasPlate) {
-            GridMetrics(maxWidth, maxHeight, oneRow, plateNames, peek, hasPlate)
+        val metrics = remember(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate) {
+            GridMetrics(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate)
         }
         val collapsePx = with(density) { (metrics.topRowY - metrics.restY).toPx() }
         val screenW = maxWidth
@@ -659,6 +668,8 @@ fun HomeScreen(
                 // (another plane and processing; a key frame a second off where the exact
                 // frame did not decode, Xiaomi MiTV-MFTR0 and TCL MT5879).
                 standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper,
+                otherFormatSaver = vm.screensaverVisible && !filmSaver && Wallpapers.screensaver == ScreensaverMode.Aerial &&
+                    !AerialFormats.screensaverCarriesWallpaper(appContext),
                 live = liveFilm,
             )
             // Anew for each choice, so another of the owner's videos does not keep the last one's player.
@@ -704,7 +715,7 @@ fun HomeScreen(
                 Rect(
                     (metrics.margin - PlatePadH).toPx(),
                     (metrics.topRowY - PlatePadV).toPx(),
-                    (metrics.margin + metrics.pitchX * (COLUMNS - 1) + metrics.tileW + PlatePadH).toPx(),
+                    (metrics.margin + metrics.pitchX * (columns - 1) + metrics.tileW + PlatePadH).toPx(),
                     (metrics.topRowY + metrics.tileH + PlatePadV + metrics.firstGap).toPx(),
                 )
             }
@@ -712,7 +723,7 @@ fun HomeScreen(
             LaunchedEffect(Wallpapers.selectedId) { filmCover.snapTo(0f) }
             // The aerial film's own glass for the grid: the one playing or stopped, else the one
             // the picture was taken from.
-            val pictureClip = remember(Wallpapers.backdrop) { Wallpapers.liveSpot()?.first }
+            val pictureClip = remember(Wallpapers.backdrop) { Wallpapers.livePictureSpot()?.first }
             val clip = if (Wallpapers.selectedId == Wallpapers.LIVE) liveFilm.film?.id ?: pictureClip else null
             LaunchedEffect(clip) { Wallpapers.showClipGlass(clip) }
             val clipGlass = Wallpapers.clipGlass?.takeIf { it.first == clip }?.second
@@ -851,7 +862,7 @@ fun HomeScreen(
                 val arrowApp = apps.getOrNull(focusedIndex)?.takeIf {
                     shelf != null && !inShelf && !pillFocused && moving == null && gridEnabled &&
                         AerialSettings.appContentMode != AppContentMode.Always &&
-                        focusedIndex < COLUMNS && shelf?.pkg == it.packageName
+                        focusedIndex < columns && shelf?.pkg == it.packageName
                 }
                 ShelfArrow(
                     show = arrowApp != null,
@@ -951,10 +962,10 @@ fun HomeScreen(
                                 // Up from the top row goes to the app's shelf when it has one: its own
                                 // (not one still showing for the app just left) and not scrolled away.
                                 .focusProperties {
-                                    if (index < COLUMNS && shelf?.pkg == app.packageName && !pastShelf) up = shelfRequester
+                                    if (index < columns && shelf?.pkg == app.packageName && !pastShelf) up = shelfRequester
                                 }
                                 .then(
-                                    if (index >= COLUMNS) Modifier.graphicsLayer {
+                                    if (index >= columns) Modifier.graphicsLayer {
                                         // The shelf up hides the rows below (a peeking or second row looked
                                         // clumsy under it); they come back as it goes.
                                         val away = 1f - shelfProgress.coerceIn(0f, 1f)
@@ -965,20 +976,20 @@ fun HomeScreen(
                                 )
                                 // Into the screensaver, the apps go left to right, sinking a little.
                                 .graphicsLayer {
-                                    val f = ((toSaver.value - 0.05f * (index % COLUMNS)) / 0.6f).coerceIn(0f, 1f)
+                                    val f = ((toSaver.value - 0.05f * (index % columns)) / 0.6f).coerceIn(0f, 1f)
                                     if (f > 0f) {
                                         alpha = 1f - f
                                         translationY = f * 18.dp.toPx()
                                         compositingStrategy = if (saverFadeOffscreen) CompositingStrategy.Offscreen else CompositingStrategy.ModulateAlpha
                                     }
                                 },
-                            rowEnd = index % COLUMNS == COLUMNS - 1 || index == apps.lastIndex,
+                            rowEnd = index % columns == columns - 1 || index == apps.lastIndex,
                             // Control Center is to the right of the top row: Up there belongs to the shelf.
-                            rowEndRight = pillRequester.takeIf { index < COLUMNS },
+                            rowEndRight = pillRequester.takeIf { index < columns },
                             // On the glass plate only with every name shown (an earlier build showed
                             // the focused one alone there, but it sat oddly on the glass).
-                            showName = plate == null || index >= COLUMNS || plateNames,
-                            nameOnPlate = plate != null && index < COLUMNS,
+                            showName = plate == null || index >= columns || plateNames,
+                            nameOnPlate = plate != null && index < columns,
                         )
                     }
                 }
@@ -1030,7 +1041,7 @@ fun HomeScreen(
                     .focusProperties {
                         val key = focusedKey
                         val shelfApp = apps.firstOrNull { it.key == key }?.packageName
-                        if (key != null && apps.indexOfFirst { it.key == key } in 0 until COLUMNS) down = if (pillFromShelf && shelf?.pkg == shelfApp) shelfRequester else requester(key)
+                        if (key != null && apps.indexOfFirst { it.key == key } in 0 until columns) down = if (pillFromShelf && shelf?.pkg == shelfApp) shelfRequester else requester(key)
                     },
                 onFocused = { gained ->
                     // The window hands its first focus to the top-most control; the top row is where Home starts.
@@ -1103,7 +1114,8 @@ fun HomeScreen(
             enabled = overlay is Overlay.Folder,
             tileW = metrics.tileW,
             tileH = metrics.tileH,
-            columns = COLUMNS,
+            gap = metrics.gap,
+            columns = columns,
             onLaunch = onLaunch,
             onLongPress = { app, bounds -> vm.overlay = Overlay.AppMenu(app.key, bounds ?: Rect.Zero, inFolder = openFolder) },
             onDismiss = { vm.overlay = Overlay.None },

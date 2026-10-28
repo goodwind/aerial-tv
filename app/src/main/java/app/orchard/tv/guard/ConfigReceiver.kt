@@ -25,10 +25,12 @@ import kotlinx.coroutines.launch
  *                                   for TVs that do not wake with it enabled, issue #371)
  *   ... --ez clear_pin true         (turn the parental PIN off, for an owner who forgot it)
  *   ... --ez large_clock true --ez clock_right false --ez one_row_home true
- *       --ez peek_next_row false --ez home_plate true --ez show_all_names false
+ *       --ez peek_next_row false --ez home_plate true --ez show_all_names false --ei home_columns 6
  *                                   (Home's layout, as in Personalize; for screenshots of each)
  *   ... --es app_content_mode up|off|always   (App Content in Personalize: Slides Out, Off, Always;
  *                                   for trying each, or measuring one)
+ *   ... --ei preview_apps 3         (Home shows only its first 3 tiles until Aerial restarts, or 0;
+ *                                   nothing is saved, for trying a nearly empty Home)
  *   ... --ez check_update true      (look for a new version now, not within three hours)
  *   ... --ez update_test true       ("Download and Install" takes files/update-test.apk instead,
  *                                   until Aerial restarts; for trying an update before a release)
@@ -108,6 +110,11 @@ class ConfigReceiver : BroadcastReceiver() {
                 AerialSettings.init(context)
                 AerialSettings.chooseAppContentMode(it)
             }
+        }
+        if (intent.hasExtra("preview_apps")) AerialSettings.previewApps = intent.getIntExtra("preview_apps", 0).coerceAtLeast(0)
+        if (intent.hasExtra("home_columns")) {
+            AerialSettings.init(context)
+            AerialSettings.chooseHomeColumns(intent.getIntExtra("home_columns", 5))
         }
         // ... --ez diag true / --ez mode_switch false / --ez soft_layer true   (see DiagLog;
         //                                 the last two apply the next time Home starts)
