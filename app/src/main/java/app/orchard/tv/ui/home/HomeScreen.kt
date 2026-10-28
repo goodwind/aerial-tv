@@ -639,6 +639,39 @@ fun HomeScreen(
             dragged = true
             scope.launch(start = CoroutineStart.UNDISPATCHED) { scroll.snapTo(scroll.value - delta) }
         }
+        // A moving wallpaper's film, under everything; it moves only on the top row with
+        // nothing over it; the owner's videos there only once Home is still unless set to keep moving.
+        // Beside Home rather than in it: Home is not drawn (alpha 0) under a whole frost or once
+        // its picture stands in under Control Center, and a SurfaceView in a layer that is not
+        // drawn cuts no hole in the window, so the paused film showed as the window's black
+        // (Xiaomi MiTV-MFTR0, the aerial wallpaper under Control Center).
+        val filmMoves = vm.resumed && overlay == Overlay.None && !vm.screensaverVisible && !pastShelf &&
+            focusedRow == 0 && moving == null && !shelfUp
+        val sourceInput = Wallpapers.sourceInput
+        when {
+            Wallpapers.selectedId == Wallpapers.LIVE -> LiveWallpaper(
+                moving = filmMoves,
+                keep = vm.resumed && (!vm.screensaverVisible || filmSaver),
+                cover = filmCover,
+                hold = filmSaver && vm.resumed,
+                // Control Center and Personalize leave Home sharp (dimmed, or above the sheet):
+                // the paused film stays. Swapped for its picture there, the background jumped
+                // (another plane and processing; a key frame a second off where the exact
+                // frame did not decode, Xiaomi MiTV-MFTR0 and TCL MT5879).
+                standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper,
+                live = liveFilm,
+            )
+            // Anew for each choice, so another of the owner's videos does not keep the last one's player.
+            Wallpapers.isVideo() -> key(Wallpapers.selectedId) {
+                VideoWallpaper(
+                    moving = filmMoves,
+                    keep = vm.resumed && !vm.screensaverVisible,
+                    lastInputAt = vm.lastInputAt,
+                    cover = filmCover,
+                )
+            }
+            sourceInput != null -> SourceWallpaper(sourceInput, show = vm.resumed && !vm.screensaverVisible, cover = filmCover)
+        }
         Box(
             Modifier
                 .fillMaxSize()
@@ -675,34 +708,6 @@ fun HomeScreen(
                     (metrics.topRowY + metrics.tileH + PlatePadV + metrics.firstGap).toPx(),
                 )
             }
-            // A moving wallpaper's film, under everything; it moves only on the top row with
-            // nothing over it; the owner's videos there only once Home is still unless set to keep moving.
-            val filmMoves = vm.resumed && overlay == Overlay.None && !vm.screensaverVisible && !pastShelf &&
-                focusedRow == 0 && moving == null && !shelfUp
-            val sourceInput = Wallpapers.sourceInput
-            when {
-                Wallpapers.selectedId == Wallpapers.LIVE -> LiveWallpaper(
-                    moving = filmMoves,
-                    keep = vm.resumed && (!vm.screensaverVisible || filmSaver),
-                    cover = filmCover,
-                    hold = filmSaver && vm.resumed,
-                    // Control Center and Personalize leave Home sharp (dimmed, or above the sheet):
-                    // the paused film stays. Swapped for its picture there, the background jumped
-                    // (another plane and processing; a key frame a second off where the exact
-                    // frame did not decode, Xiaomi MiTV-MFTR0 and TCL MT5879).
-                    standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper,
-                    live = liveFilm,
-                )
-                Wallpapers.selectedId == Wallpapers.VIDEOS -> VideoWallpaper(
-                    moving = filmMoves,
-                    keep = vm.resumed && !vm.screensaverVisible,
-                    lastInputAt = vm.lastInputAt,
-                    cover = filmCover,
-                )
-                sourceInput != null -> SourceWallpaper(sourceInput, show = vm.resumed && !vm.screensaverVisible, cover = filmCover)
-            }
-            // The app's own picture while its shelf is up; else the chosen wallpaper, or in "Follow
-            // App" mode light from the focused app.
             // Another wallpaper chosen: nothing shows through until the new one has a frame.
             LaunchedEffect(Wallpapers.selectedId) { filmCover.snapTo(0f) }
             // The aerial film's own glass for the grid: the one playing or stopped, else the one
@@ -712,6 +717,8 @@ fun HomeScreen(
             LaunchedEffect(clip) { Wallpapers.showClipGlass(clip) }
             val clipGlass = Wallpapers.clipGlass?.takeIf { it.first == clip }?.second
             HomeBackground(
+                // The app's own picture while its shelf is up; else the chosen wallpaper, or in "Follow
+                // App" mode light from the focused app.
                 backdrop = Wallpapers.backdrop ?: ambientApp?.art?.backdrop,
                 shelfPoster = shelfBackdrop,
                 shelfPosters = shelfPosters,
