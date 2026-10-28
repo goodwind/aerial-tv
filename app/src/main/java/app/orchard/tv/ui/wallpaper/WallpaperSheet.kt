@@ -814,12 +814,15 @@ private fun <T> Choices(
 @Composable
 private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choose: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    DropdownPill(options.firstOrNull { it.first == current }?.second.orEmpty()) { open = true }
-    if (open) {
-        DropdownList(
-            options, isOn = { it == current }, start = (options.firstOrNull { it.first == current } ?: options.first()).first,
-            done = null, onDismiss = { open = false },
-        ) { choose(it); open = false }
+    // One box for both, so that the list is anchored to the pill and the row sees a single control.
+    Box {
+        DropdownPill(options.firstOrNull { it.first == current }?.second.orEmpty()) { open = true }
+        if (open) {
+            DropdownList(
+                options, isOn = { it == current }, start = (options.firstOrNull { it.first == current } ?: options.first()).first,
+                done = null, onDismiss = { open = false },
+            ) { choose(it); open = false }
+        }
     }
 }
 
@@ -832,9 +835,11 @@ private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choos
 private fun <T> MultiDropdownChoice(options: List<Pair<T, String>>, selected: Set<T>, toggle: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val all = stringResource(R.string.ms_all)
-    DropdownPill(multiSummary(options.filter { it.first in selected }.map { it.second }, options.size, all)) { open = true }
-    if (open) {
-        DropdownList(options, isOn = { it in selected }, start = options.first().first, done = stringResource(R.string.ms_done), onDismiss = { open = false }, onPick = toggle)
+    Box {
+        DropdownPill(multiSummary(options.filter { it.first in selected }.map { it.second }, options.size, all)) { open = true }
+        if (open) {
+            DropdownList(options, isOn = { it in selected }, start = options.first().first, done = stringResource(R.string.ms_done), onDismiss = { open = false }, onPick = toggle)
+        }
     }
 }
 
@@ -848,18 +853,16 @@ internal fun multiSummary(selected: List<String>, total: Int, all: String, maxNa
 /** The pill: [text] and a chevron down, white when focused. */
 @Composable
 private fun DropdownPill(text: String, onOpen: () -> Unit) {
-    Box {
-        Pressable(onClick = onOpen, focusedScale = 1.06f) { state ->
-            val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "drop-bg")
-            val fg = if (state.focused) Palette.OnFocus else Palette.Label
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).background(bg).height(40.dp).padding(start = 20.dp, end = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
-                GlyphIcon(Glyph.ChevronRight, fg, 18.dp, Modifier.rotate(90f))
-            }
+    Pressable(onClick = onOpen, focusedScale = 1.06f) { state ->
+        val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "drop-bg")
+        val fg = if (state.focused) Palette.OnFocus else Palette.Label
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(bg).height(40.dp).padding(start = 20.dp, end = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
+            GlyphIcon(Glyph.ChevronRight, fg, 18.dp, Modifier.rotate(90f))
         }
     }
 }
