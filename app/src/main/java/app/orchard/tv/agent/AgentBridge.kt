@@ -29,7 +29,7 @@ object AgentBridge {
             AgentCommand.Settings -> AgentApi.describe(settings).toString()
             AgentCommand.State -> vm?.let {
                 AgentApi.stateJson(
-                    AgentApi.overlayName(it.overlay::class.simpleName), it.reportedFocus, it.apps.map { a -> a.key to a.label }, settings,
+                    AgentApi.overlayName(it.overlay), it.reportedFocus, it.apps.map { a -> a.key to a.label }, settings,
                 )
             } ?: "error: Home is not running"
             is AgentCommand.Set -> AgentApi.set(settings, command.key, command.value)

@@ -1,5 +1,8 @@
 package app.orchard.tv.agent
 
+import androidx.compose.ui.geometry.Rect
+import app.orchard.tv.Overlay
+import app.orchard.tv.ui.home.PinMode
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -79,13 +82,13 @@ class AgentApiTest {
     }
 
     @Test fun `an overlay is named by a stable word`() {
-        assertEquals("none", AgentApi.overlayName(null))
-        assertEquals("control_center", AgentApi.overlayName("ControlCenter"))
-        assertEquals("personalize", AgentApi.overlayName("Wallpaper"))
-        assertEquals("hidden_apps", AgentApi.overlayName("HiddenApps"))
-        assertEquals("folder", AgentApi.overlayName("Folder"))
-        assertEquals("app_menu", AgentApi.overlayName("AppMenu"))
-        assertEquals("pin", AgentApi.overlayName("Pin"))
+        assertEquals("none", AgentApi.overlayName(Overlay.None))
+        assertEquals("control_center", AgentApi.overlayName(Overlay.ControlCenter()))
+        assertEquals("personalize", AgentApi.overlayName(Overlay.Wallpaper))
+        assertEquals("hidden_apps", AgentApi.overlayName(Overlay.HiddenApps))
+        assertEquals("folder", AgentApi.overlayName(Overlay.Folder("f")))
+        assertEquals("app_menu", AgentApi.overlayName(Overlay.AppMenu("k", Rect.Zero)))
+        assertEquals("pin", AgentApi.overlayName(Overlay.Pin(PinMode.Unlock) {}))
     }
 
     @Test fun `the state is one JSON object`() {

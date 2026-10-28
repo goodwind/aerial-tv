@@ -1,5 +1,6 @@
 package app.orchard.tv.agent
 
+import app.orchard.tv.Overlay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -78,16 +79,15 @@ object AgentApi {
         }
     })
 
-    /** The overlay's class name ([Overlay]'s subclasses) as the word an agent uses for it. */
-    fun overlayName(className: String?): String = when (className) {
-        null, "None" -> "none"
-        "ControlCenter" -> "control_center"
-        "Wallpaper" -> "personalize"
-        "HiddenApps" -> "hidden_apps"
-        "AppMenu" -> "app_menu"
-        "Folder" -> "folder"
-        "Pin" -> "pin"
-        else -> className.lowercase()
+    /** The word an agent uses for an [Overlay]; matched by type, since R8 renames the classes in a release build. */
+    fun overlayName(overlay: Overlay): String = when (overlay) {
+        Overlay.None -> "none"
+        is Overlay.ControlCenter -> "control_center"
+        Overlay.Wallpaper -> "personalize"
+        Overlay.HiddenApps -> "hidden_apps"
+        is Overlay.AppMenu -> "app_menu"
+        is Overlay.Folder -> "folder"
+        is Overlay.Pin -> "pin"
     }
 
     /** What is on screen as one JSON object: the overlay, the focused tile, the tiles in order, the settings' values. */
