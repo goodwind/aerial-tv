@@ -24,10 +24,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +49,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -59,6 +62,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntOffset
 import app.orchard.tv.R
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.settings.FocusStyle
@@ -567,13 +576,97 @@ private fun <T> Choices(
     first: Boolean = false,
 ) {
     SettingRow(label, hint, note, first) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        val named = options.map { (value, text) -> value to if (text is Int) stringResource(text) else text.toString() }
+        if (named.size > MAX_CHIPS) DropdownChoice(named, current, choose)
+        else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            named.forEach { (value, text) -> Chip(text, on = current == value) { choose(value) } }
+        }
+    }
+}
+
+/** Past this many options a setting is a drop-down list, not a row of chips that would crowd the row. */
+private const val MAX_CHIPS = 3
+
+/**
+ * The chosen option in a pill with a chevron: OK opens the list of all of them under it, OK on one
+ * chooses it and closes the list, Back closes it unchanged.
+ */
+@Composable
+private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choose: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shown = options.firstOrNull { it.first == current }?.second.orEmpty()
+    Box {
+        Pressable(onClick = { open = true }, focusedScale = 1.06f) { state ->
+            val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "drop-bg")
+            val fg = if (state.focused) Palette.OnFocus else Palette.Label
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(bg).height(40.dp).padding(start = 20.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                BasicText(shown, style = Type.Body.copy(color = fg))
+                GlyphIcon(Glyph.ChevronRight, fg, 18.dp, Modifier.rotate(90f))
+            }
+        }
+        if (open) DropdownList(options, current, onDismiss = { open = false }) { choose(it); open = false }
+    }
+}
+
+/** The list of options under its pill; focus starts on the chosen one. */
+@Composable
+private fun <T> DropdownList(options: List<Pair<T, String>>, current: T, onDismiss: () -> Unit, onPick: (T) -> Unit) {
+    val start = remember { FocusRequester() }
+    val startValue = (options.firstOrNull { it.first == current } ?: options.first()).first
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        runCatching { start.requestFocus() }
+    }
+    Popup(popupPositionProvider = BelowThePill, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        Column(
+            Modifier
+                .widthIn(min = 200.dp)
+                .heightIn(max = 300.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xF22C2C2E))
+                .verticalScroll(rememberScrollState())
+                .padding(8.dp),
+        ) {
             options.forEach { (value, text) ->
-                Chip(if (text is Int) stringResource(text) else text.toString(), on = current == value) { choose(value) }
+                Pressable(onClick = { onPick(value) }, focusRequester = if (value == startValue) start else null, focusedScale = 1f) { state ->
+                    val bg by animateColorAsState(if (state.focused) Palette.Focus else Color.Transparent, tween(120, easing = Motion.EaseOut), label = "drop-item")
+                    val fg = if (state.focused) Palette.OnFocus else Palette.Label
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).height(44.dp).padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        // The check's room is kept on every row, so the names line up.
+                        Box(Modifier.size(14.dp)) { if (value == current) GlyphIcon(Glyph.Check, fg, 14.dp) }
+                        BasicText(text, style = Type.Body.copy(color = fg), maxLines = 1)
+                    }
+                }
             }
         }
     }
 }
+
+private object BelowThePill : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
+        dropdownPosition(anchorBounds, windowSize, popupContentSize)
+}
+
+/**
+ * Where a drop-down list of [content] size goes for a pill at [anchor]: under it, its right edge on
+ * the pill's; above it when there is no room below; never out of the [window].
+ */
+internal fun dropdownPosition(anchor: IntRect, window: IntSize, content: IntSize): IntOffset {
+    val x = (anchor.right - content.width).coerceIn(0, (window.width - content.width).coerceAtLeast(0))
+    val below = anchor.bottom + DROPDOWN_GAP
+    val y = if (below + content.height <= window.height) below else anchor.top - DROPDOWN_GAP - content.height
+    return IntOffset(x, y.coerceAtLeast(0))
+}
+
+private const val DROPDOWN_GAP = 6
 
 /** Parental PIN on or off; either way goes through the PIN pad (issue #10). */
 @Composable
@@ -658,15 +751,16 @@ private fun ActionChip(label: String, glyph: Glyph, onClick: () -> Unit) {
 private fun ScreensaverChoice(onStart: () -> Unit) {
     // The choice first, then the action that tries it.
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        listOf(
-            ScreensaverMode.Aerial to R.string.ss_aerial,
-            ScreensaverMode.Photos to R.string.ss_photos,
-            ScreensaverMode.Clock to R.string.ss_clock,
-            ScreensaverMode.Videos to R.string.ss_videos,
-            ScreensaverMode.System to R.string.ss_system,
-        ).forEach { (mode, label) ->
-            Chip(stringResource(label), on = Wallpapers.screensaver == mode) { Wallpapers.chooseScreensaver(mode) }
-        }
+        DropdownChoice(
+            listOf(
+                ScreensaverMode.Aerial to stringResource(R.string.ss_aerial),
+                ScreensaverMode.Photos to stringResource(R.string.ss_photos),
+                ScreensaverMode.Clock to stringResource(R.string.ss_clock),
+                ScreensaverMode.Videos to stringResource(R.string.ss_videos),
+                ScreensaverMode.System to stringResource(R.string.ss_system),
+            ),
+            Wallpapers.screensaver, Wallpapers::chooseScreensaver,
+        )
         Spacer(Modifier.width(6.dp))
         Pressable(onClick = onStart, focusedScale = 1.06f) { state ->
             val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "ss-start")
