@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -62,6 +66,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.Popup
@@ -74,6 +79,7 @@ import app.orchard.tv.settings.FocusStyle
 import app.orchard.tv.settings.UiSounds
 import app.orchard.tv.settings.Effects
 import app.orchard.tv.system.Sounds
+import app.orchard.tv.ui.components.PressState
 import app.orchard.tv.ui.components.Pressable
 import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
@@ -259,7 +265,8 @@ fun WallpaperSheet(
                                         else -> null
                                     },
                                     note, first = true,
-                                ) { ScreensaverChoice(onStartScreensaver) }
+                                    compact = { ScreensaverChoice(onStartScreensaver, collapsed = true) },
+                                ) { ScreensaverChoice(onStartScreensaver, collapsed = false) }
                                 // Only the qualities this TV can play; a 1080p-only TV has nothing to choose.
                                 val qualities = remember { AerialFormats.supported(context) }
                                 if (qualities.size > 1) {
@@ -547,21 +554,66 @@ private fun Group(note: String? = null, rows: @Composable ColumnScope.(note: (St
     }
 }
 
-/** One row: the setting's name on the left, its control on the right, a hairline above all but the first. */
+/**
+ * One row: the setting's name on the left, its control on the right, a hairline above all but the
+ * first. With a [compact] form, the row measures the control as it would be drawn (a row of chips,
+ * without taking focus) and shows the compact one instead when the name and the control do not
+ * both fit: a long name, a long translation, or many options, whatever the number.
+ */
 @Composable
-private fun SettingRow(label: Int, hint: String?, note: (String?) -> Unit, first: Boolean = false, control: @Composable () -> Unit) {
+private fun SettingRow(
+    label: Int,
+    hint: String?,
+    note: (String?) -> Unit,
+    first: Boolean = false,
+    compact: (@Composable () -> Unit)? = null,
+    control: @Composable () -> Unit,
+) {
     if (!first) Box(Modifier.padding(start = 18.dp).fillMaxWidth().height(1.dp).background(Palette.Hairline))
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .padding(start = 18.dp, end = 10.dp)
-            .onFocusChanged { if (it.hasFocus) note(hint) },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText(stringResource(label), style = Type.Body, modifier = Modifier.weight(1f), maxLines = 1)
-        control()
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .height(58.dp)
+        .padding(start = 18.dp, end = 10.dp)
+        .onFocusChanged { if (it.hasFocus) note(hint) }
+    if (compact == null) {
+        Row(rowModifier, verticalAlignment = Alignment.CenterVertically) {
+            BasicText(stringResource(label), style = Type.Body, modifier = Modifier.weight(1f), maxLines = 1)
+            control()
+        }
+        return
     }
+    val name = stringResource(label)
+    SubcomposeLayout(rowModifier) { c ->
+        val gap = ROW_GAP.roundToPx()
+        val nameBox = subcompose("name") { BasicText(name, style = Type.Body, maxLines = 1, softWrap = false) }.first()
+        val nameWidth = nameBox.measure(Constraints()).width
+        val asDrawn = subcompose("probe") { CompositionLocalProvider(LocalProbe provides true) { control() } }.first().measure(Constraints()).width
+        val fits = controlFits(nameWidth, asDrawn, c.maxWidth, gap)
+        val shown = subcompose(if (fits) "full" else "compact") { if (fits) control() else compact() }.first()
+            .measure(Constraints(maxWidth = c.maxWidth))
+        // The name gives way (an ellipsis) if even the compact control leaves it too little.
+        val named = nameBox.measure(Constraints(maxWidth = (c.maxWidth - shown.width - gap).coerceAtLeast(0)))
+        layout(c.maxWidth, c.maxHeight) {
+            named.placeRelative(0, (c.maxHeight - named.height) / 2)
+            shown.placeRelative(c.maxWidth - shown.width, (c.maxHeight - shown.height) / 2)
+        }
+    }
+}
+
+/** The room kept between a setting's name and its control. */
+private val ROW_GAP = 24.dp
+
+/** Whether a name [labelWidth] wide and a control [controlWidth] wide, [gap] apart, fit a row [rowWidth] wide. */
+internal fun controlFits(labelWidth: Int, controlWidth: Int, rowWidth: Int, gap: Int) = labelWidth + gap + controlWidth <= rowWidth
+
+/** Set while a control is only being measured: it is drawn, but takes neither focus nor touches. */
+private val LocalProbe = compositionLocalOf { false }
+
+/** A [Pressable] that, while the control is only being measured, is its face alone. */
+@Composable
+private fun Tap(onClick: () -> Unit, focusedScale: Float = 1.06f, content: @Composable BoxScope.(PressState) -> Unit) {
+    if (LocalProbe.current) Box { content(remember { PressState() }) }
+    else Pressable(onClick = onClick, focusedScale = focusedScale, content = content)
 }
 
 /** A row of chips for one of a few values. */
@@ -575,21 +627,18 @@ private fun <T> Choices(
     choose: (T) -> Unit,
     first: Boolean = false,
 ) {
-    SettingRow(label, hint, note, first) {
-        val named = options.map { (value, text) -> value to if (text is Int) stringResource(text) else text.toString() }
-        if (named.size > MAX_CHIPS) DropdownChoice(named, current, choose)
-        else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    val named = options.map { (value, text) -> value to if (text is Int) stringResource(text) else text.toString() }
+    SettingRow(label, hint, note, first, compact = { DropdownChoice(named, current, choose) }) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             named.forEach { (value, text) -> Chip(text, on = current == value) { choose(value) } }
         }
     }
 }
 
-/** Past this many options a setting is a drop-down list, not a row of chips that would crowd the row. */
-private const val MAX_CHIPS = 3
-
 /**
- * The chosen option in a pill with a chevron: OK opens the list of all of them under it, OK on one
- * chooses it and closes the list, Back closes it unchanged.
+ * The chosen option in a pill with a chevron, for a setting whose options do not fit its row (see
+ * [SettingRow]): OK opens the list of all of them under it, OK on one chooses it and closes the
+ * list, Back closes it unchanged.
  */
 @Composable
 private fun <T> DropdownChoice(options: List<Pair<T, String>>, current: T, choose: (T) -> Unit) {
@@ -708,7 +757,7 @@ private fun WeatherValue() {
 /** A pill to pick one of a few options: a check on the chosen one, white when focused. */
 @Composable
 private fun Chip(label: String, on: Boolean, onFocused: (() -> Unit)? = null, onClick: () -> Unit) {
-    Pressable(onClick = onClick, focusedScale = 1.06f) { state ->
+    Tap(onClick = onClick) { state ->
         if (onFocused != null) LaunchedEffect(state.focused) { if (state.focused) onFocused() }
         val bg by animateColorAsState(
             when {
@@ -748,21 +797,20 @@ private fun ActionChip(label: String, glyph: Glyph, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ScreensaverChoice(onStart: () -> Unit) {
+private fun ScreensaverChoice(onStart: () -> Unit, collapsed: Boolean) {
     // The choice first, then the action that tries it.
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        DropdownChoice(
-            listOf(
-                ScreensaverMode.Aerial to stringResource(R.string.ss_aerial),
-                ScreensaverMode.Photos to stringResource(R.string.ss_photos),
-                ScreensaverMode.Clock to stringResource(R.string.ss_clock),
-                ScreensaverMode.Videos to stringResource(R.string.ss_videos),
-                ScreensaverMode.System to stringResource(R.string.ss_system),
-            ),
-            Wallpapers.screensaver, Wallpapers::chooseScreensaver,
+        val modes = listOf(
+            ScreensaverMode.Aerial to stringResource(R.string.ss_aerial),
+            ScreensaverMode.Photos to stringResource(R.string.ss_photos),
+            ScreensaverMode.Clock to stringResource(R.string.ss_clock),
+            ScreensaverMode.Videos to stringResource(R.string.ss_videos),
+            ScreensaverMode.System to stringResource(R.string.ss_system),
         )
+        if (collapsed) DropdownChoice(modes, Wallpapers.screensaver, Wallpapers::chooseScreensaver)
+        else modes.forEach { (mode, label) -> Chip(label, on = Wallpapers.screensaver == mode) { Wallpapers.chooseScreensaver(mode) } }
         Spacer(Modifier.width(6.dp))
-        Pressable(onClick = onStart, focusedScale = 1.06f) { state ->
+        Tap(onClick = onStart) { state ->
             val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.FillStrong, tween(140, easing = Motion.EaseOut), label = "ss-start")
             val fg = if (state.focused) Palette.OnFocus else Palette.Label
             Row(
