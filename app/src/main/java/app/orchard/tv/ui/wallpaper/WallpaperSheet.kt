@@ -269,7 +269,8 @@ fun WallpaperSheet(
                                 ) { ScreensaverChoice(onStartScreensaver, collapsed = false) }
                                 // Only the qualities this TV can play; a 1080p-only TV has nothing to choose.
                                 val qualities = remember { AerialFormats.supported(context) }
-                                if (qualities.size > 1) {
+                                // And only while the films are in use: the aerial screensaver or the aerial wallpaper.
+                                if (qualities.size > 1 && usesAerialFilms(Wallpapers.screensaver, Wallpapers.selectedId)) {
                                     Choices(
                                         R.string.ss_quality, stringResource(R.string.ss_quality_hint), note,
                                         listOf(AerialQuality.Auto to R.string.ss_quality_auto, AerialQuality.Hd to R.string.ss_quality_hd) +
@@ -599,6 +600,13 @@ private fun SettingRow(
         }
     }
 }
+
+/**
+ * Whether the aerial films play anywhere: as the screensaver or as the wallpaper. The settings that
+ * only they have (their quality) show only then, so that a page keeps to what the choices made on it use.
+ */
+internal fun usesAerialFilms(screensaver: ScreensaverMode, wallpaperId: String) =
+    screensaver == ScreensaverMode.Aerial || wallpaperId == Wallpapers.LIVE
 
 /** The room kept between a setting's name and its control. */
 private val ROW_GAP = 24.dp
