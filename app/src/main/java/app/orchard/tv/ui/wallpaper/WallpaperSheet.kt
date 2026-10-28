@@ -95,6 +95,9 @@ import kotlin.math.roundToInt
  * the screen showing Home, so a new wallpaper can be seen the moment it is chosen. A QR code on the
  * right opens the same settings on a phone, where sending photos is easy.
  */
+/** Where the sheet's top edge lies: under the status pill and the small clock, which sit 28 dp from the top. */
+private val SHEET_TOP = 76.dp
+
 @Composable
 fun WallpaperSheet(
     visible: Boolean,
@@ -133,7 +136,10 @@ fun WallpaperSheet(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(360.dp)
+                    // To just under the top line: the pill and the small clock stay above it, and no
+                    // Home shows beside them.
+                    .fillMaxHeight()
+                    .padding(top = SHEET_TOP)
                     .consumeTaps()
                     // Glass made from the wallpaper itself, opaque: Home is not blurred behind
                     // this sheet, so the wallpaper above it stays sharp while you choose, and the
