@@ -587,7 +587,8 @@ private fun SettingRow(
     SubcomposeLayout(rowModifier) { c ->
         val gap = ROW_GAP.roundToPx()
         val nameBox = subcompose("name") { BasicText(name, style = Type.Body, maxLines = 1, softWrap = false) }.first()
-        val nameWidth = nameBox.measure(Constraints()).width
+        // A Measurable may be measured once: the name's width as it would be drawn comes from its intrinsics.
+        val nameWidth = nameBox.maxIntrinsicWidth(c.maxHeight)
         val asDrawn = subcompose("probe") { CompositionLocalProvider(LocalProbe provides true) { control() } }.first().measure(Constraints()).width
         val fits = controlFits(nameWidth, asDrawn, c.maxWidth, gap)
         val shown = subcompose(if (fits) "full" else "compact") { if (fits) control() else compact() }.first()
