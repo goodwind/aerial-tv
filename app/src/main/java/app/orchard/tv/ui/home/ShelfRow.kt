@@ -315,9 +315,13 @@ private fun ShelfCard(
 
     // Decoded at the lifted size, so the focused card stays sharp.
     val picture by produceState<ImageBitmap?>(null, item.image, width, height) {
-        val uri = item.image ?: return@produceState
+        // produceState keeps its last value while the new one loads: another page of the shelf
+        // would show the previous page's poster on this card until its own came. The picture
+        // already in the cache is shown at once, else the card stays empty until it is loaded.
+        val uri = item.image
         val (w, h) = with(density) { (width.toPx() * FOCUSED_SCALE).roundToInt() to (height.toPx() * FOCUSED_SCALE).roundToInt() }
-        value = ShelfImages.card(uri, w, h)?.asImageBitmap()
+        value = uri?.let { ShelfImages.cachedCard(it, w, h) }?.asImageBitmap()
+        if (uri != null && value == null) value = ShelfImages.card(uri, w, h)?.asImageBitmap()
     }
     val shown by animateFloatAsState(if (picture != null) 1f else 0f, tween(260, easing = Motion.EaseOut), label = "card-picture")
 

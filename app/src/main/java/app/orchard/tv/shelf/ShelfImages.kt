@@ -43,6 +43,9 @@ object ShelfImages {
         app = context.applicationContext
     }
 
+    /** The picture at [uri] for [w]×[h] px if it is already decoded, else null; no fetching. */
+    fun cachedCard(uri: String, w: Int, h: Int): Bitmap? = cards.get("$uri@${w}x$h")
+
     /** The picture at [uri], decoded to cover [w]×[h] px. */
     suspend fun card(uri: String, w: Int, h: Int): Bitmap? {
         val key = "$uri@${w}x$h"
