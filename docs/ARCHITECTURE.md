@@ -99,13 +99,19 @@ site/update/                        电视升级页二维码打开的页面：�
 - 空闲时不能有任何持续动画（测量结果是 0 帧）。
 - 模糊（`BlurEffect`）只在控制中心 / 隐藏 App 面板打开时用。
 - 面板（控制中心、个性化、长按菜单、隐藏的 App、家长密码、移动提示）都用 `Modifier.liquidGlass`：同样取模糊版壁纸里面板身后的那一块，压到一半亮度保证白字可读，再加玻璃边缘。每个面板只填一次自己的面积，和原来的纯色一样；「跟随 App」模式没有模糊版壁纸，退回原来的深色 `Palette.Glass`。玻璃（轮廓遮罩、磨砂、边缘）录在一个 `CompositingStrategy.Offscreen` 的 `GraphicsLayer` 里，GPU 只在面板移动、尺寸变化或磨砂换图淡入时重画它，平时每帧只贴一次；以前每帧开一次面板大小的 `saveLayer` 再画遮罩、磨砂、边缘，overdraw 显示个性化面板整片 4 层以上。小米 MFTR0（静态壁纸，release，两轮 A/B）：个性化里左右移动壁纸卡片帧耗时中位 53 → 25 ms（GPU 约 29 → 14 ms），上下滚动 53 → 26 ms，重新打开中位 22 → 18 ms，但打开那一帧要建层，最慢一帧 89 → 101 ms；首页不变，控制中心中位 17 → 15–17 ms。试过个性化打开时把主页也放进离屏层，只再快约 3 ms，航拍的 SurfaceView 放进离屏层有风险，没采用。TCL MT5879 没装这一版（原版个性化左右移动中位 22 ms，这台跑 120Hz）。
-- 加任何全屏效果前，先测：`adb shell dumpsys gfxinfo app.orchard.tv framestats`。
+- 加任何全屏效果前，先测：`adb shell dumpsys gfxinfo app.orchard.tv framestats`，或者用 `tools/perf.py <serial> [row grid cc wallpaper menu saver …]` 按操作测（见 [PERF-2026-10-28.md](PERF-2026-10-28.md)）。
+- **影片不压暗**（户主 2026-10-29 决定）：航拍和我的视频壁纸，动着、停下、停下后的定格图，以及航拍屏保，都不画压暗。只有电视输入画面当壁纸时还压暗（`HomeBackground` 的 `shadeMoving`）。影片底板烟色改成 28% 黑，并且影片停下时也不换成静止玻璃（`Plate` 里 `film != null`），以前长按菜单时底板会从半透明变成整块磨砂。
+- **每帧都画的东西里不要用渐变**（`Brush.*Gradient`、`LinearGradient`）。全屏渐变在电视 GPU 上很贵：航拍影片上那两层压暗（上下 + 左侧）小米 MFTR0 每帧要 22 ms，首页移动中位 81 ms。现在开机时烘焙成 128×72 的小图（`Images.homeShade`），每帧拉伸画一次，GPU 30 → 13 ms，中位 81 → 31 ms。屏保文字压暗也一样（`Screensaver.labelShade`），而且只画上下两条带（透明的中间也要填充，一样花时间）。静态壁纸的压暗本来就烘焙在图里。
+- **玻璃在后台烘焙**：底板的玻璃（静止底板和影片底板）都在 `Dispatchers.Default` 上烘焙，烘焙好之前继续画上一块。静止底板原来在绘制时烘焙，影片一停（打开菜单、控制中心、进网格）就占主线程约 37 ms；改到后台后，小米上这三个操作最慢一帧 99/146/135 → 83–90/66/59 ms。
+- **个性化预热**：和控制中心一样，首页空闲 3 秒后把面板以 1% 不透明度画 3 帧、不拿焦点（`WallpaperSheet` 的 `warm`，`WallpaperRows(takeFocus = false)`）。进程重启后第一次打开，最慢一帧 316 → 181 ms。
+- **逐层诊断**：`ConfigReceiver --es skip_layers …`（`ui/components/DiagLayers.kt`）让首页的某几层不画，用来在慢电视上找出最贵的那一层；`Frames` 行在 Android 12+ 带 GPU 时间。
+- **不透明面板下面不要画**：个性化面板完全滑入后（`WallpaperSheet` 的 `onSettled`），首页和暗幕只画到 `SheetCovers`（面板高度减去顶部圆角）为止。以前面板下面每帧都在画壁纸、压暗、底板、磁贴和暗幕，过度绘制 4 层以上：小米个性化 GPU 40 → 12 ms，中位 90 → 38 ms。Lite 同样处理（`HomeView.coveredBelow`）。
 - 一定要装 release 版，并执行 `cmd package compile -m speed -f app.orchard.tv`。debug 版的 Compose 在电视上明显卡顿。**要在 Aerial 启动过一次之后再编译**：小米 MFTR0（Android 14）把 `speed` 当成 `speed-profile`，装完立刻编译时还没有 profile，结果还是 `verify`（解释执行）。`install.sh` 已经改成先启动、等 5 秒再编译。
 - **Baseline Profile**（`app/src/main/baseline-prof.txt`）：Aerial 自己的代码和 Compose 全部标成热点。不经过 `install.sh` 的安装（控制中心升级、多屏互动推送、U 盘）不会立刻编译，系统要等后台编译任务（空闲且充电时）才按它编译；小米上实测不会在安装时用 APK 里的 profile（`assets/dexopt/` 和 `assets/art-profile/` 都试过）。编译前后：首页磁贴出来 0.8 秒 → 0.4 秒。诊断报告的 `Compiled` 一行：Android 9+（11 除外）显示 profile 状态，`odex` 大小在所有版本上都能看出编译了没有（只 verify 时几百 KB，`speed` 时约 11 MB）。
 - **冷启动不在主线程做的事**：App 列表和信号源同时查（`HomeViewModel.reload`）；磁贴面（连续圆角 + 描边的位图）由 `TileFaces.prepare` 在后台按 5 个一批做，做好前磁贴先画原图（图层的圆角裁剪已经很接近），以前第一次绘制时整页一起在主线程做，小米上约 120 ms；第一排的聚焦尺寸随后也在后台做；字体（Inter 和系统的后备字体链）由 `FontWarmup` 在 `onCreate` 时在后台加载，以前第一次量文字时在主线程做，58 ms → 4 ms。DiagLog 的 `apps in` 一行把耗时拆成 wait / queries / tiles / main。
 - **冷启动只先读前几排的磁贴**：磁贴缓存是每个 App 一个文件（PNG），52 个 App 共 23 MB 像素，TCL MT5879 上解码要 4 个线程合计 1.4–1.9 秒 CPU，墙钟 500–680 ms（改存压缩的原始像素只省约 10%，文件大 1.7 倍，没采用）。现在冷启动只把按保存顺序的前 13 个磁贴（文件夹算一个，读它里面的 App）整张读出来（`LayoutStore.leading`），其余只读文件开头的名字和颜色，先画成纯色占位（`TileArt.placeholder`，在屏幕外），首页出来后紧接着在后台全读（DiagLog「N more tiles in … ms」）。占位个数要从这次加载自己的列表里数：冷启动后按主页键，守护会再起一个 MainActivity，两个首页同时加载，起初把个数记在 `AppCatalog` 里，另一个首页的第二遍把它清零，这个首页就不补读，占位一直留在网格里（小米 MFTR0 上 3 次复现 2 次，改后 4 次都正常）。新装、升级后第一次启动（缓存键不匹配）照旧全读。TCL：tiles 约 530 → 165 ms，首页出来 688–790 → 360–600 ms（多数约 370 ms）。
 - **控制中心预热**：每个进程一次，首页空闲 3 秒后把面板以 1% 不透明度画 3 帧、不拿焦点（`HomeScreen` 的 `ccWarm`），第一次打开就不再是第一次绘制。小米第一次打开帧耗时中位数 58 → 33 ms（最慢 95 → 38）；TCL 82 → 14–28 ms（最慢 309 → 36–67）。
-- **效果（流畅模式）**：个性化 → 主屏幕 →「效果：自动 / 完整 / 流畅」（`AerialSettings.effects`）。流畅：面板用纯色（壁纸磨砂图的平均色，按玻璃的压暗算，不透明；不用每帧的离屏层），聚焦磁贴不画高光、视差和阴影，不切到更高刷新率；Android 7 以前控制中心背后的时钟和磁贴随遮罩淡出（那里没有主页截图，#466）。「自动」在低端电视上是流畅（`DeviceClass`：固件 low-RAM 标志、内存小于 1.8 GB、Android 6 及以下、两核及以下），别的是完整。小米和 TCL 都不算低端。
+- **效果（流畅模式）**：个性化 → 主屏幕 →「效果：自动 / 完整 / 流畅」（`AerialSettings.effects`）。流畅：面板用纯色（壁纸磨砂图的平均色，按玻璃的压暗算，不透明；不用每帧的离屏层），聚焦磁贴不画高光、视差和阴影，不切到更高刷新率。Android 7 以前控制中心背后没有主页截图（#466），每帧重画磁贴；1.48 起流畅模式下那里的时钟和磁贴随遮罩淡出，用户以为桌面没了（#823），已撤掉。「自动」在低端电视上是流畅（`DeviceClass`：固件 low-RAM 标志、内存小于 1.8 GB、Android 6 及以下、两核及以下），别的是完整。小米和 TCL 都不算低端。
 - **内存**：`onTrimMemory`（RUNNING_LOW 及以上、后台级别，不含每次离开桌面的 UI_HIDDEN）丢掉壁纸缩略图和聚焦尺寸的磁贴面。
 - **诊断报告的 `Frames` 一行**（Android 7+，`FrameStats`，FrameMetrics）：启动 5 秒后的最近 600 帧的中位数、p90、p99、最慢，用户报卡顿时带着自己电视的数字。
 
@@ -245,7 +251,7 @@ NanoHTTPD 监听 8790 端口，路径前缀是 8 位随机令牌（每次打开�
   - 锁定期间只记窗口，不启动界面、不拦 HOME；凭据加密存储里的偏好（keep_adb、屏保）解锁后再读
   - ACTION_USER_UNLOCKED → 1.5 秒后按下面的规则接管。TCL 75S365C 上从解锁到 Aerial 7.6 秒 → 约 2 秒
 运行：HomeGuardService
-  - onKeyEvent(HOME) → 不是默认桌面时吞掉按键，打开 Aerial（Android 11 及以下一直开着按键过滤，见 filterKeys；接着手柄 `SOURCE_GAMEPAD` 且前台是别的 App 时不过滤，#774：过滤时每个手柄事件都要经 system_server 主线程重新注入，MFTR0 安卓 11 串流时卡死重启。不看 joystick 位：TCL MT5879 的红外接收器带这一位）
+  - onKeyEvent(HOME) → 不是默认桌面时吞掉按键，打开 Aerial（Android 11 及以下一直开着按键过滤，见 filterKeys；接着手柄 `SOURCE_GAMEPAD` 且前台是别的 App 时不过滤，#774：过滤时每个手柄事件都要经 system_server 主线程重新注入，MFTR0 安卓 11 串流时卡死重启。不看 joystick 位：TCL MT5879 的红外接收器带这一位；名字里带 virtual 的设备也不算，索尼的语音搜索设备 `virtual-search` 自称手柄，#840）
   - 守护「聋」了（#651）：重启无障碍在安卓 6 以上改成把 Aerial 从列表拿出再放回（只改 `accessibility_enabled` 不会重新绑定）；发现聋之后，按主页键起每 150 ms 查一次用量统计，直到收到窗口事件。开机复查时最后看到的窗口如果是负优先级的 HOME（开机向导、FallbackHome，`fallbackHomes`），当作前台未知，问用量统计（#701）
   - TYPE_WINDOW_STATE_CHANGED → 原桌面的 HOME Activity 到前台 → 打开 Aerial
   - 亮屏、开机、复活、解锁 → 等 1.5 秒，前台还是原桌面（或者不知道）才打开 Aerial（takeOverOnceSettled）。
@@ -257,15 +263,23 @@ NanoHTTPD 监听 8790 端口，路径前缀是 8 位随机令牌（每次打开�
   → GuardSetup.ensureEnabled() → 守护重新启用 → onServiceConnected 判断为「刚被复活」→ 打开 Aerial
 ```
 
+通知服务的启动恢复不只依赖 `onListenerConnected`：`RevivalListener.onCreate` 也启动有限次数的检查，在服务创建后约 5、10、20、35、65、125 秒检查用户是否解锁、守护是否绑定，最后再等 5 秒确认。已绑定就停止；尚未解锁只等待，不读凭据存储；解锁广播即使丢失也会由下一次检查发现。重绑复用 `GuardSetup.rebindIfStalled`，保留其他无障碍服务，并遵守 `guard_off_in_standby`。窗口耗尽后不再轮询；较晚才收到解锁或通知连接回调时可以启动新窗口。服务销毁取消尚未执行的检查。
+
+`GuardSetup.ensureEnabled` 在确认户主已授予 `WRITE_SECURE_SETTINGS` 后，也会清除 Aerial 自己的 `BootReceiver` 禁用覆盖（不是修改别人的组件）。组件覆盖会跨 APK 更新保留；Android 8 的 ADB shell 不能改普通应用的单个组件，由应用自己恢复。恢复过程进 `DiagLog`；`adb shell dumpsys activity service app.orchard.tv/.guard.RevivalListener` 也打印重试状态和内存诊断，避免只能在首页已经打开后才能取日志。
+
 `allowStockLauncher`：用户从网格里主动打开原桌面时，1 小时内不拦截。
 
-电视的播放器（`com.tcl.tv`、`com.xiaomi.mitv.tvplayer`）即使声明了 HOME，也不算原桌面，除非它就是系统解析出来的 HOME：TCL 85G60E 把 `com.tcl.tv` 列为 HOME，每次切信号源都被守护当成原桌面拉回（#223，用户日志；家里的 TCL MT5879 没有这个 HOME，没有真机验证）。
+电视的播放器（`com.tcl.tv`、`com.xiaomi.mitv.tvplayer`、`com.skyworth.tv`，以及海思的 `com.hisilicon.tvui`：它声明 `TV_HOME`，酷开 C10 从固件信号源选择器切 HDMI 后被拉回，#779）即使声明了 HOME，也不算原桌面，除非它就是系统解析出来的 HOME：TCL 85G60E 把 `com.tcl.tv` 列为 HOME，每次切信号源都被守护当成原桌面拉回（#223，用户日志；家里的 TCL MT5879 没有这个 HOME，没有真机验证）。
 
 **只装了 APK 的电视**（U 盘、应用商店，#207 #213）：1.32 起 `MainActivity` 也声明 `CATEGORY_LAUNCHER`，国内电视的「我的应用」大多只列这种，以前装完找不到图标。打开后没有 `WRITE_SECURE_SETTINGS`（只有 install.sh 会授权）、桌面状态又是「尚未设为默认桌面」时，4 秒后自动打开一次控制中心的「设为主屏幕」页（`CcPage.Setup`，`settings` 的 `setup_offered` 记住），以后从控制中心底部进去。页上按电视有没有这些设置页显示：无障碍（手动打开桌面守护，小米 MFTR0 有，TCL MT5879 没有）、默认桌面（只有 standard 版；小米会忽略）、通知使用权（待机被杀后复活），以及二维码：打开 `site/update/#setup=1`，给出这台电视的安装命令和 Agent 提示词。Google TV 模拟器（Android 13）上验证过自动弹出和跳到无障碍设置。
 
 ## 系统能力（system/）
 
 - **信号源**：`TvInputManager` 列出直通输入和调谐器。装了 `com.xiaomi.mitv.tvplayer` 的走小米的 Intent（HDMI 的 `input = HW 编号 + 18`，AV=2，ATV/DTMB 各自的 Activity），否则走 `TvContract` 的通用 URI。CEC 子输入的名字用于显示设备名，`Playback_1` 这类通用名会被过滤。`DeviceProfile` 存放按机型的修正，见下面「机型修正」。
+- **网络设置入口**：海信的 `com.android.tv.settings/com.hisense.systemsettings.MainActivity`
+  存在、启用且导出时，优先用 `ACTION_WIFI_SETTINGS` 打开海信自己的 Wi-Fi 页，避开固件残留的
+  Android TV 网络页（#760，H55E9A / Android 8）。其他电视的原有候选顺序和完整版的失败回退不变，
+  Lite 同步这个入口；验证边界见 `docs/devices/hisense-vidaa.md`。
 - **音量**：`AudioManager` 的 STREAM_MUSIC；TCL 必须加 `FLAG_SHOW_UI`（否则不会写入功放）。
 - **亮度**：见 `Brightness.kt` 的注释（小米 / 标准 / TCL 面板三种）。
 - **设置入口**：优先厂商自己的设置（小米 `com.xiaomi.mitv.settings`）。有的厂商的完整设置是服务弹出的面板，先按服务启动：极米 `SettingService`、康佳 `com.konka.service.SettingService` + `SETTING_MAIN_VIEW`（#771，只在服务导出时用，失败退回 Activity）。

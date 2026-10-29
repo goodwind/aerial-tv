@@ -53,6 +53,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -76,6 +77,7 @@ import app.orchard.tv.R
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.apps.AppEntry
 import app.orchard.tv.ui.control.ControlCenter
+import app.orchard.tv.ui.wallpaper.SheetCovers
 import app.orchard.tv.ui.wallpaper.WallpaperSheet
 import app.orchard.tv.wallpaper.AerialFormats
 import app.orchard.tv.wallpaper.ScreensaverMode
@@ -84,6 +86,7 @@ import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Type
+import app.orchard.tv.ui.components.diagLayer
 import androidx.compose.runtime.snapshotFlow
 import app.orchard.tv.system.DiagLog
 import app.orchard.tv.system.SystemProbe
@@ -554,6 +557,8 @@ fun HomeScreen(
         val openFolder = (overlay as? Overlay.Folder)?.id ?: (overlay as? Overlay.AppMenu)?.inFolder
         val folderOpen = overlay is Overlay.HiddenApps || openFolder != null
         val ccOpen = overlay is Overlay.ControlCenter
+        var sheetIn by remember { mutableStateOf(false) }
+        var sheetWarm by remember { mutableStateOf(false) }
         // Folders open on Home frosted, as on tvOS; Control Center keeps Home sharp, dimmed.
         val backdropFrost by animateFloatAsState(
             if (folderOpen) 1f else 0f,
@@ -604,11 +609,14 @@ fun HomeScreen(
                 keep = vm.resumed && (!vm.screensaverVisible || filmSaver),
                 cover = filmCover,
                 hold = filmSaver && vm.resumed,
-                // Control Center and Personalize leave Home sharp (dimmed, or above the sheet):
-                // the paused film stays. Swapped for its picture there, the background jumped
-                // (another plane and processing; a key frame a second off where the exact
-                // frame did not decode, Xiaomi MiTV-MFTR0 and TCL MT5879).
-                standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper,
+                // Control Center, Personalize and an app's menu on Home leave Home sharp (dimmed,
+                // above the sheet, beside the menu): the paused film stays. Swapped for its picture
+                // there, the background jumped (another plane and processing; a key frame a second
+                // off where the exact frame did not decode, Xiaomi MiTV-MFTR0 and TCL MT5879); the
+                // menu flashed so as it opened (the owner, MFTR0). In a folder Home is frosted.
+                standIn = overlay == Overlay.None || overlay is Overlay.ControlCenter || overlay is Overlay.Wallpaper ||
+                    (overlay is Overlay.AppMenu && overlay.inFolder == null),
+                panel = overlay != Overlay.None,
                 otherFormatSaver = vm.screensaverVisible && !filmSaver && Wallpapers.screensaver == ScreensaverMode.Aerial &&
                     !AerialFormats.screensaverCarriesWallpaper(appContext),
                 live = liveFilm,
@@ -647,6 +655,9 @@ fun HomeScreen(
                     if (ccOpen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         homeLayer.record { this@drawWithContent.drawContent() }
                         drawLayer(homeLayer)
+                    } else if (sheetIn) {
+                        // Under Personalize's settled sheet, only what shows above it.
+                        clipRect(bottom = size.height - SheetCovers.toPx()) { this@drawWithContent.drawContent() }
                     } else drawContent()
                 },
         ) {
@@ -696,19 +707,12 @@ fun HomeScreen(
             )
 
             // Before Android 7 there is no picture of Home under Control Center (issue #466), so the
-            // GPU draws every tile again under the panel each frame. Lite there lets the clock and
-            // the tiles fade out under the panel's veil; the wallpaper and plate stay.
-            val shedUnderPanel = Build.VERSION.SDK_INT < Build.VERSION_CODES.N && AerialSettings.lite
+            // GPU draws every tile again under the panel each frame. Lite there once let the clock and
+            // tiles fade out under the veil; Home looked gone behind the panel (issue #823), so they stay.
             Box(
                 Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, -scroll.value.roundToInt()) }
-                    .then(
-                        if (shedUnderPanel) Modifier.graphicsLayer {
-                            alpha = 1f - backdropVeil
-                            compositingStrategy = CompositingStrategy.ModulateAlpha
-                        } else Modifier,
-                    ),
+                    .offset { IntOffset(0, -scroll.value.roundToInt()) },
             ) {
                 val clockRight = AerialSettings.clockRight
                 // The large clock stands over the top row; the small one is the time and weather in
@@ -718,6 +722,7 @@ fun HomeScreen(
                         now = now,
                         alignEnd = clockRight,
                         modifier = Modifier
+                            .diagLayer("clock")
                             .align(if (clockRight) Alignment.TopEnd else Alignment.TopStart)
                             .padding(horizontal = metrics.margin)
                             .padding(top = metrics.clockY)
@@ -735,6 +740,7 @@ fun HomeScreen(
                     CornerClock(
                         now = now,
                         modifier = Modifier
+                            .diagLayer("clock")
                             .padding(start = metrics.margin, top = 28.dp)
                             .graphicsLayer {
                                 alpha = 1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)
@@ -802,6 +808,7 @@ fun HomeScreen(
                                 }
                             },
                             modifier = Modifier
+                                .diagLayer("tiles")
                                 // Lifted on the shelf with the plate; the clock above stays put.
                                 .offset { slot.value - IntOffset(0, lift.roundToInt()) }
                                 .then(
@@ -848,6 +855,7 @@ fun HomeScreen(
                 CornerClock(
                     now = now,
                     modifier = Modifier
+                        .diagLayer("clock")
                         .padding(end = 14.dp)
                         .graphicsLayer {
                             alpha = 1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)
@@ -864,6 +872,7 @@ fun HomeScreen(
                 enabled = gridEnabled && moving == null,
                 focusRequester = pillRequester,
                 modifier = Modifier
+                    .diagLayer("pill")
                     // Down goes back to the top-row tile Up came from, not to the nearest one,
                     // which under the pill is the last of the row (issue #703).
                     .focusProperties {
@@ -912,8 +921,9 @@ fun HomeScreen(
             )
         }
 
-        // Once per process, while Home is idle: Control Center drawn for a few frames, nearly
-        // transparent, so that its first opening is not its first draw (see ControlCenter).
+        // Once per process, while Home is idle: Control Center, then Personalize, drawn for a few
+        // frames, nearly transparent, so that their first opening is not their first draw (see
+        // ControlCenter, WallpaperSheet).
         var ccWarm by remember { mutableStateOf(false) }
         LaunchedEffect(vm.loaded) {
             if (!vm.loaded || ControlCenterWarmed.done) return@LaunchedEffect
@@ -926,6 +936,12 @@ fun HomeScreen(
             ccWarm = true
             repeat(3) { withFrameNanos { } }
             ccWarm = false
+            // A frame apart, so that the two first draws do not land in the same frame.
+            withFrameNanos { }
+            if (vm.overlay != Overlay.None) return@LaunchedEffect
+            sheetWarm = true
+            repeat(3) { withFrameNanos { } }
+            sheetWarm = false
         }
         ControlCenter(
             visible = overlay is Overlay.ControlCenter,
@@ -1020,6 +1036,8 @@ fun HomeScreen(
 
         WallpaperSheet(
             visible = overlay is Overlay.Wallpaper,
+            onSettled = { sheetIn = it },
+            warm = sheetWarm,
             onDismiss = { vm.overlay = Overlay.ControlCenter() },
             hiddenCount = vm.hiddenApps.size,
             onHiddenApps = { vm.whenUnlocked { vm.overlay = Overlay.HiddenApps } },
