@@ -68,6 +68,7 @@ import app.orchard.tv.ui.components.UhdCanvas
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.wallpaper.PhoneServer
 import app.orchard.tv.wallpaper.Wallpapers
+import app.orchard.tv.system.BootOpen
 import app.orchard.tv.system.DiagLog
 import app.orchard.tv.system.FrameStats
 import app.orchard.tv.wallpaper.AerialFormats
@@ -214,7 +215,6 @@ class MainActivity : ComponentActivity() {
         val fresh = savedInstanceState == null
         FontWarmup.start(this)
         val uhd = UhdCanvas.scale(this)
-        TileArtFactory.useCanvasDensity(canvasDensity(resources.displayMetrics) * uhd)
         Wallpapers.init(this)
         Weather.init(this)
         Updates.init(this)
@@ -223,6 +223,8 @@ class MainActivity : ComponentActivity() {
         SourceLooks.init(this)
         AppNames.init(this)
         AerialSettings.init(this)
+        // After the settings: the artwork's size follows the number of apps a row.
+        TileArtFactory.useCanvasDensity(canvasDensity(resources.displayMetrics) * uhd)
         Sounds.init(this)
         val reducedMotion = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
@@ -274,7 +276,11 @@ class MainActivity : ComponentActivity() {
             setContent(content = home)
         }
 
-        ContextCompat.registerReceiver(this, screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            this, screenOnReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_ON).apply { addAction(Intent.ACTION_SCREEN_OFF) },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // Control Center shows things that change while it is open (Home Guard binds a few seconds
         // after Aerial starts): look again every few seconds, only while it is open and Aerial is on screen.
         lifecycleScope.launch {
@@ -359,6 +365,7 @@ class MainActivity : ComponentActivity() {
      */
     private val screenOnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_OFF) { BootOpen.noteScreenOff(context); return }
             idleHandler.postDelayed({
                 if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) openBootSource("screen on")
             }, 1500)
@@ -385,6 +392,10 @@ class MainActivity : ComponentActivity() {
         val pkg = AerialSettings.bootApp
         if (id == null && pkg == null) return
         if (SystemClock.elapsedRealtime() - bootSourceOpenedAt < 15_000) return
+        if (!BootOpen.due(this)) {
+            android.util.Log.i("Aerial", "$reason: already opened ${id ?: pkg} since the TV came on")
+            return
+        }
         bootSourceOpenedAt = SystemClock.elapsedRealtime()
         lifecycleScope.launch {
             // An app opens from its own entry at once: listing every app took 6.5 s at power-on on
@@ -415,6 +426,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             android.util.Log.i("Aerial", "$reason: opening ${intent.first}, what the TV starts on")
+            BootOpen.noteOpened(this@MainActivity)
             openedAppSinceHome = true
             open(intent.second)
         }
@@ -749,7 +761,8 @@ class MainActivity : ComponentActivity() {
         )
         getSystemService<ConnectivityManager>()?.let { cm ->
             if (Build.VERSION.SDK_INT >= 24) cm.registerDefaultNetworkCallback(networkCallback)
-            else cm.registerNetworkCallback(NetworkRequest.Builder().build(), networkCallback)
+            // A request leaves VPNs out unless told otherwise; the status pill shows one coming up (issue #809).
+            else cm.registerNetworkCallback(NetworkRequest.Builder().removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), networkCallback)
         }
         // Apps can change while Aerial is in the background without it hearing about it.
         vm.reload()
@@ -861,7 +874,7 @@ class MainActivity : ComponentActivity() {
 
         /** See handOverToFirmwareFallbackHome; for this process. */
         private var handedOverAtBoot = false
-        private val AOSP_FALLBACK_HOMES = setOf("com.android.settings.FallbackHome", "com.android.tv.settings.system.FallbackHome")
+        private val AOSP_FALLBACK_HOMES = setOf("com.android.settings.FallbackHome", "com.android.tv.settings.system.FallbackHome", "com.android.tv.settings.ui.activity.FallbackHome")
 
         /** How Home Guard and the boot receiver bring Aerial back: the same task the launcher entry uses. */
         fun bringBackIntent(context: Context): Intent =
